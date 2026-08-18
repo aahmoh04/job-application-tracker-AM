@@ -225,7 +225,7 @@ Two decisions worth calling out. `Company` is its own table rather than a string
 ### Setup
 
 ```bash
-git clone https://github.com/aahmoh/job-application-tracker-AM.git
+git clone https://github.com/aahmoh04/job-application-tracker-AM.git
 cd job-application-tracker-AM
 
 npm install
@@ -338,6 +338,6 @@ MIT. See [LICENSE](LICENSE).
 
 <div align="center">
 
-Built by [**@aahmoh**](https://github.com/aahmoh)
+Built by [**@aahmoh04**](https://github.com/aahmoh04)
 
 </div>
