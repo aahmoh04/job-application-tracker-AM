@@ -4,7 +4,7 @@
 
 **Track every application, its status, and follow-up reminders, so nothing slips through.**
 
-[![Next.js](https://img.shields.io/badge/Next.js-15-000000?logo=next.js&logoColor=white)](https://nextjs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![Prisma](https://img.shields.io/badge/Prisma-6-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io)
@@ -21,7 +21,7 @@ This project is built in public, one milestone at a time. The sections below des
 
 | # | Milestone | Status |
 |---|---|---|
-| 00 | Project setup, TypeScript, CI | ⬜ |
+| 00 | Project setup, TypeScript, CI | ✅ |
 | 01 | Data model, PostgreSQL, Prisma | ⬜ |
 | 02 | Credentials auth (JWT in httpOnly cookies) | ⬜ |
 | 03 | OAuth sign-in (Google, GitHub) | ⬜ |
@@ -101,7 +101,7 @@ Login and registration endpoints are rate-limited per IP and per account through
 
 | Layer | Choice | Why this one |
 |---|---|---|
-| Framework | Next.js 15, App Router | Server Components keep data fetching on the server, Server Actions remove the need for a separate REST layer for mutations |
+| Framework | Next.js 16, App Router | Server Components keep data fetching on the server, Server Actions remove the need for a separate REST layer for mutations |
 | Language | TypeScript, strict mode | The pipeline is a state machine, and a union type of statuses turns an illegal transition into a compile error instead of a support ticket |
 | Database | PostgreSQL 16 | Relational data with real foreign keys, plus window functions for the funnel and time-in-stage queries |
 | ORM | Prisma 6 | Typed queries generated from the schema, and versioned migrations so the schema history is reviewable in git |
@@ -218,7 +218,7 @@ Two decisions worth calling out. `Company` is its own table rather than a string
 
 ### Prerequisites
 
-- Node.js 20 or newer
+- Node.js 22 or newer
 - Docker, for the local PostgreSQL and Redis containers
 - A [Resend](https://resend.com) API key, only needed once you reach the reminder feature
 
@@ -260,7 +260,7 @@ npm run dev                   # http://localhost:3000
 | `npm run dev` | Development server |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
-| `npm run typecheck` | TypeScript without emitting |
+| `npm run typecheck` | Generates route types, then checks all types without emitting |
 | `npm run test` | Unit tests, Vitest |
 | `npm run test:e2e` | End-to-end tests, Playwright |
 | `npx prisma studio` | Browse the database in the browser |
