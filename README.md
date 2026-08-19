@@ -7,7 +7,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
-[![Prisma](https://img.shields.io/badge/Prisma-6-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io)
+[![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://redis.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -22,7 +22,7 @@ This project is built in public, one milestone at a time. The sections below des
 | # | Milestone | Status |
 |---|---|---|
 | 00 | Project setup, TypeScript, CI | ✅ |
-| 01 | Data model, PostgreSQL, Prisma | ⬜ |
+| 01 | Data model, PostgreSQL, Prisma | ✅ |
 | 02 | Credentials auth (JWT in httpOnly cookies) | ⬜ |
 | 03 | OAuth sign-in (Google, GitHub) | ⬜ |
 | 04 | Application CRUD with validated forms | ⬜ |
@@ -104,7 +104,7 @@ Login and registration endpoints are rate-limited per IP and per account through
 | Framework | Next.js 16, App Router | Server Components keep data fetching on the server, Server Actions remove the need for a separate REST layer for mutations |
 | Language | TypeScript, strict mode | The pipeline is a state machine, and a union type of statuses turns an illegal transition into a compile error instead of a support ticket |
 | Database | PostgreSQL 16 | Relational data with real foreign keys, plus window functions for the funnel and time-in-stage queries |
-| ORM | Prisma 6 | Typed queries generated from the schema, and versioned migrations so the schema history is reviewable in git |
+| ORM | Prisma 7 | Typed queries generated from the schema, and versioned migrations so the schema history is reviewable in git. Uses the `pg` driver adapter rather than a bundled engine |
 | Cache & rate limiting | Redis 7 | Sliding-window counters on auth endpoints and a TTL cache for dashboard aggregates. Both need fast expiring keys, which is exactly what Redis is for |
 | Email | Resend + React Email | Transactional delivery with templates written as components instead of hand-glued HTML strings |
 | Validation | Zod | One schema validates the form on the client and the payload on the server, and infers the TypeScript type from the same definition |
@@ -229,7 +229,7 @@ git clone https://github.com/aahmoh04/job-application-tracker-AM.git
 cd job-application-tracker-AM
 
 npm install
-cp .env.example .env.local
+cp .env.example .env
 
 docker compose up -d          # starts postgres + redis
 npx prisma migrate dev        # applies migrations
@@ -251,7 +251,7 @@ npm run dev                   # http://localhost:3000
 | `RESEND_API_KEY` | Transactional email delivery |
 | `CRON_SECRET` | Shared secret protecting the reminder endpoint |
 
-`.env.local` is gitignored. `.env.example` holds the keys with empty values and is committed.
+`.env` is gitignored. `.env.example` holds the keys with empty values and is committed. Prisma reads `.env` through `prisma.config.ts`, Next.js reads it as well.
 
 ### Scripts
 
@@ -264,6 +264,9 @@ npm run dev                   # http://localhost:3000
 | `npm run test` | Unit tests, Vitest |
 | `npm run test:e2e` | End-to-end tests, Playwright |
 | `npx prisma studio` | Browse the database in the browser |
+| `npm run db:up` | Start Postgres and Redis containers |
+| `npm run db:stop` | Stop them again |
+| `npm run db:seed` | Load demo data |
 
 ---
 
