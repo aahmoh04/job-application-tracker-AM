@@ -20,6 +20,12 @@ jobs:
     name: Lint, typecheck and build
     runs-on: ubuntu-latest
 
+    # No database is reached here. `prisma generate` only reads the schema and
+    # writes TypeScript, but prisma.config.ts resolves DATABASE_URL while
+    # loading, so the variable has to exist. Deliberately not a real one.
+    env:
+      DATABASE_URL: "postgresql://ci:ci@127.0.0.1:5432/ci?schema=public"
+
     steps:
       - name: Check out the repository
         uses: actions/checkout@v6

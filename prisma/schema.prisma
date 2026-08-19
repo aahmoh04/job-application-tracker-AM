@@ -1,0 +1,143 @@
+// Data model for the Job Application Tracker.
+//
+// The connection URL lives in prisma.config.ts, not here.
+// Regenerate the client after every change:  npx prisma generate
+// Create a migration after every change:     npx prisma migrate dev --name <what-changed>
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  USER
+  ADMIN
+}
+
+/// The pipeline. Legal transitions are enforced in application code (M05),
+/// the database only guarantees that the value is one of these.
+enum Status {
+  DRAFT
+  APPLIED
+  SCREENING
+  INTERVIEW
+  OFFER
+  ACCEPTED
+  REJECTED
+  DECLINED
+  WITHDRAWN
+}
+
+enum Source {
+  JOB_BOARD
+  REFERRAL
+  DIRECT
+  RECRUITER
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  /// Null for users who only ever signed in through OAuth.
+  passwordHash String?
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  accounts     Account[]
+  applications Application[]
+}
+
+/// One row per linked OAuth provider. A user can have both Google and GitHub.
+model Account {
+  id                String   @id @default(cuid())
+  userId            String
+  provider          String
+  providerAccountId String
+  createdAt         DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+/// Its own table rather than a string on Application, so the same employer
+/// cannot show up under three spellings and quietly break every aggregate.
+model Company {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  website   String?
+  createdAt DateTime @default(now())
+
+  applications Application[]
+}
+
+model Application {
+  id             String    @id @default(cuid())
+  userId         String
+  companyId      String
+  role           String
+  status         Status    @default(DRAFT)
+  source         Source    @default(DIRECT)
+  salaryMin      Int?
+  salaryMax      Int?
+  postingUrl     String?
+  notes          String?
+  appliedAt      DateTime?
+  followUpAt     DateTime?
+  /// Set once the reminder mail went out, so a retry cannot send it twice.
+  reminderSentAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  statusEvents StatusEvent[]
+  contacts     Contact[]
+
+  @@index([userId, status])
+  @@index([userId, followUpAt])
+  @@index([companyId])
+}
+
+/// Append-only. Never updated, never deleted. This is what makes the timeline
+/// trustworthy and time-in-stage analytics possible at all.
+model StatusEvent {
+  id            String   @id @default(cuid())
+  applicationId String
+  /// Null on the very first event, because there is no previous status.
+  from          Status?
+  to            Status
+  note          String?
+  createdAt     DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+}
+
+model Contact {
+  id            String  @id @default(cuid())
+  applicationId String
+  name          String
+  email         String?
+  role          String?
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
