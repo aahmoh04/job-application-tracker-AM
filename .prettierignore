@@ -4,4 +4,6 @@ out
 build
 coverage
 package-lock.json
+src/generated
+prisma/migrations
 *.md
