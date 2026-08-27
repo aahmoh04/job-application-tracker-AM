@@ -1,8 +1,11 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
+import { setSessionCookie } from "@/lib/auth/cookies";
 import { hashPassword } from "@/lib/auth/password";
+import { createSessionToken } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { signUpSchema } from "@/lib/validation/auth";
 
@@ -12,8 +15,6 @@ export type SignUpState = {
     password?: string[];
     confirmPassword?: string[];
   };
-  message?: string;
-  success?: boolean;
 };
 
 export async function signUp(_prevState: SignUpState, formData: FormData): Promise<SignUpState> {
@@ -36,8 +37,10 @@ export async function signUp(_prevState: SignUpState, formData: FormData): Promi
   // already taken, which is a timing side channel.
   const passwordHash = await hashPassword(password);
 
+  let user;
+
   try {
-    await prisma.user.create({ data: { email, passwordHash } });
+    user = await prisma.user.create({ data: { email, passwordHash } });
   } catch (error) {
     // P2002 is Prisma's code for a unique constraint violation. Here that can
     // only be the email, since it is the single unique column on User.
@@ -47,5 +50,10 @@ export async function signUp(_prevState: SignUpState, formData: FormData): Promi
     throw error;
   }
 
-  return { success: true, message: "Account created. Sign-in arrives in the next step." };
+  const token = await createSessionToken({ userId: user.id, role: user.role });
+  await setSessionCookie(token);
+
+  // Outside the try/catch above. redirect() works by throwing a special error
+  // that Next catches itself, so a catch block would swallow the redirect.
+  redirect("/dashboard");
 }
