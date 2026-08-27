@@ -23,7 +23,7 @@ This project is built in public, one milestone at a time. The sections below des
 |---|---|---|
 | 00 | Project setup, TypeScript, CI | ✅ |
 | 01 | Data model, PostgreSQL, Prisma | ✅ |
-| 02 | Credentials auth (JWT in httpOnly cookies) | ⬜ |
+| 02 | Credentials auth (JWT in httpOnly cookies) | ✅ |
 | 03 | OAuth sign-in (Google, GitHub) | ⬜ |
 | 04 | Application CRUD with validated forms | ⬜ |
 | 05 | Status pipeline and event history | ⬜ |
