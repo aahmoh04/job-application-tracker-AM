@@ -28,7 +28,7 @@ function getSecretKey(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-export function createSessionToken(session: SessionPayload): Promise<string> {
+export async function createSessionToken(session: SessionPayload): Promise<string> {
   return new SignJWT({ role: session.role })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(session.userId)
