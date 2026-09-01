@@ -24,7 +24,7 @@ This project is built in public, one milestone at a time. The sections below des
 | 00 | Project setup, TypeScript, CI | ✅ |
 | 01 | Data model, PostgreSQL, Prisma | ✅ |
 | 02 | Credentials auth (JWT in httpOnly cookies) | ✅ |
-| 03 | OAuth sign-in (Google, GitHub) | ⬜ |
+| 03 | OAuth sign-in (Google, GitHub) | 🟨 |
 | 04 | Application CRUD with validated forms | ⬜ |
 | 05 | Status pipeline and event history | ⬜ |
 | 06 | Redis rate limiting and caching | ⬜ |
@@ -307,7 +307,7 @@ Shipping order, one milestone at a time. The numbers match the status table abov
 - **M00 Foundation** — Next.js with strict TypeScript, ESLint, Prettier, GitHub Actions running lint, typecheck and build on every push
 - **M01 Data model** — Prisma schema, first migration, seed script, Docker Compose for Postgres and Redis
 - **M02 Credentials auth** — registration, Argon2id hashing, JWT session in an httpOnly cookie, middleware route guard
-- **M03 OAuth** — Google and GitHub, account linking onto an existing email
+- **M03 OAuth** — GitHub done, Google next. Authorization code flow with PKCE, account linking onto an existing verified email
 - **M04 Applications** — create, read, update, delete, Zod validation on both sides, ownership enforced server-side
 - **M05 Pipeline** — transition rules as a typed state machine, StatusEvent history, Kanban board with drag and drop
 - **M06 Redis** — sliding-window rate limiter on auth, cached dashboard aggregates with event-driven invalidation

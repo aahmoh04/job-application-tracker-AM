@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OAuthButtons } from "../oauth-buttons";
 import { SignUpForm } from "./sign-up-form";
 
 export const metadata: Metadata = {
@@ -15,6 +16,7 @@ export default function SignUpPage() {
         </p>
       </div>
       <SignUpForm />
+      <OAuthButtons />
     </main>
   );
 }
