@@ -24,7 +24,7 @@ This project is built in public, one milestone at a time. The sections below des
 | 00 | Project setup, TypeScript, CI | ✅ |
 | 01 | Data model, PostgreSQL, Prisma | ✅ |
 | 02 | Credentials auth (JWT in httpOnly cookies) | ✅ |
-| 03 | OAuth sign-in (Google, GitHub) | 🟨 |
+| 03 | OAuth sign-in (GitHub) | ✅ |
 | 04 | Application CRUD with validated forms | ⬜ |
 | 05 | Status pipeline and event history | ⬜ |
 | 06 | Redis rate limiting and caching | ⬜ |
@@ -89,7 +89,9 @@ The dashboard queries are the heaviest read path in the app, so the computed res
 
 ### Accounts and access
 
-Two ways in. Email and password with credentials hashed using Argon2id, and OAuth through Google and GitHub. Both paths end in the same session, a signed JWT stored in an httpOnly, SameSite cookie.
+Two ways in. Email and password with credentials hashed using Argon2id, and OAuth through GitHub. Both paths end in the same session, a signed JWT stored in an httpOnly, SameSite cookie.
+
+The OAuth flow is written out rather than pulled from a library: authorization code with PKCE, a `state` cookie checked on the way back, the code exchanged server to server, and only **verified** provider emails accepted for linking. A second provider would be configuration on top of the same flow, which is why one is enough here.
 
 Access control is role-based. A `USER` sees and edits only their own applications. An `ADMIN` reaches an operations view with aggregate platform metrics and no access to the content of anyone's applications. Authorization is enforced server-side on every mutation, so hiding a button in the UI is treated as cosmetics rather than as a security control.
 
@@ -171,7 +173,7 @@ erDiagram
     Account {
         string id PK
         string userId FK
-        string provider "google | github"
+        string provider "github"
         string providerAccountId
     }
     Company {
@@ -246,7 +248,6 @@ npm run dev                   # http://localhost:3000
 | `REDIS_URL` | Redis connection string |
 | `JWT_SECRET` | Signing secret for session tokens |
 | `NEXT_PUBLIC_APP_URL` | Public base URL, used for OAuth callbacks and email links |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth credentials |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth credentials |
 | `RESEND_API_KEY` | Transactional email delivery |
 | `CRON_SECRET` | Shared secret protecting the reminder endpoint |
@@ -307,7 +308,7 @@ Shipping order, one milestone at a time. The numbers match the status table abov
 - **M00 Foundation** — Next.js with strict TypeScript, ESLint, Prettier, GitHub Actions running lint, typecheck and build on every push
 - **M01 Data model** — Prisma schema, first migration, seed script, Docker Compose for Postgres and Redis
 - **M02 Credentials auth** — registration, Argon2id hashing, JWT session in an httpOnly cookie, middleware route guard
-- **M03 OAuth** — GitHub done, Google next. Authorization code flow with PKCE, account linking onto an existing verified email
+- **M03 OAuth** — GitHub sign-in, authorization code flow with PKCE, account linking onto an existing verified email
 - **M04 Applications** — create, read, update, delete, Zod validation on both sides, ownership enforced server-side
 - **M05 Pipeline** — transition rules as a typed state machine, StatusEvent history, Kanban board with drag and drop
 - **M06 Redis** — sliding-window rate limiter on auth, cached dashboard aggregates with event-driven invalidation
@@ -329,6 +330,7 @@ Shipping order, one milestone at a time. The numbers match the status table abov
 
 Things worth writing down as I go, filled in milestone by milestone:
 
+- **Why M03 ships with one OAuth provider instead of two.** The plan said Google and GitHub. GitHub is done, and adding Google would have meant a second set of credentials on top of a flow that is already written and understood. The interesting part of OAuth is the flow itself, not repeating it, so the scope was cut on purpose rather than left half finished
 - Why the pipeline lives in one module instead of being spread across the UI
 - What actually changed when the dashboard queries moved behind a cache
 - The idempotency bug the reminder job had before `reminderSentAt` existed
