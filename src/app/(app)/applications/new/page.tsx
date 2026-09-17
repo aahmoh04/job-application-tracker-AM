@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { ApplicationForm } from "./application-form";
+import { ApplicationForm, EMPTY_APPLICATION } from "../application-form";
+import { createApplication } from "@/lib/applications/actions";
 
 export const metadata: Metadata = {
   title: "Add application",
@@ -14,7 +15,12 @@ export default function NewApplicationPage() {
           Company and role are enough to start. Everything else can follow later.
         </p>
       </div>
-      <ApplicationForm />
+      <ApplicationForm
+        action={createApplication}
+        defaultValues={EMPTY_APPLICATION}
+        submitLabel="Save application"
+        cancelHref="/applications"
+      />
     </main>
   );
 }

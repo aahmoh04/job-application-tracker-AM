@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { createApplication, type ApplicationFormState } from "@/lib/applications/actions";
+import type { ApplicationFormState } from "@/lib/applications/actions";
+
+/**
+ * One form for creating and for editing. Two near-identical copies are the
+ * surest way to forget one of them when a field is added later.
+ *
+ * The `action` comes in as a prop, already bound to an id in the edit case.
+ * Binding happens on the server, so the id travels signed rather than as a
+ * hidden input the browser could change.
+ */
 
 const initialState: ApplicationFormState = {};
 
@@ -37,8 +46,33 @@ function FieldError({ messages }: { messages?: string[] }) {
   );
 }
 
-export function ApplicationForm() {
-  const [state, formAction, isPending] = useActionState(createApplication, initialState);
+export type ApplicationFormValues = {
+  companyName: string;
+  role: string;
+  status: string;
+  source: string;
+  salaryMin: string;
+  salaryMax: string;
+  postingUrl: string;
+  notes: string;
+  appliedAt: string;
+  followUpAt: string;
+};
+
+type Props = {
+  action: (state: ApplicationFormState, formData: FormData) => Promise<ApplicationFormState>;
+  defaultValues: ApplicationFormValues;
+  submitLabel: string;
+  cancelHref: string;
+};
+
+export function ApplicationForm({ action, defaultValues, submitLabel, cancelHref }: Props) {
+  const [state, formAction, isPending] = useActionState(action, initialState);
+
+  // What came back from a failed submit wins over the stored record, so a
+  // rejected form shows what the user typed and not what is in the database.
+  const value = (field: keyof ApplicationFormValues) =>
+    state.values?.[field] ?? defaultValues[field];
 
   return (
     <form action={formAction} className="flex flex-col gap-6" noValidate>
@@ -47,7 +81,13 @@ export function ApplicationForm() {
           <label htmlFor="companyName" className="text-sm font-medium">
             Company
           </label>
-          <input id="companyName" name="companyName" required className={inputClass} />
+          <input
+            id="companyName"
+            name="companyName"
+            required
+            defaultValue={value("companyName")}
+            className={inputClass}
+          />
           <FieldError messages={state.errors?.companyName} />
         </div>
 
@@ -55,7 +95,13 @@ export function ApplicationForm() {
           <label htmlFor="role" className="text-sm font-medium">
             Role
           </label>
-          <input id="role" name="role" required className={inputClass} />
+          <input
+            id="role"
+            name="role"
+            required
+            defaultValue={value("role")}
+            className={inputClass}
+          />
           <FieldError messages={state.errors?.role} />
         </div>
 
@@ -63,7 +109,7 @@ export function ApplicationForm() {
           <label htmlFor="status" className="text-sm font-medium">
             Status
           </label>
-          <select id="status" name="status" defaultValue="DRAFT" className={inputClass}>
+          <select id="status" name="status" defaultValue={value("status")} className={inputClass}>
             {STATUS_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -77,7 +123,7 @@ export function ApplicationForm() {
           <label htmlFor="source" className="text-sm font-medium">
             Source
           </label>
-          <select id="source" name="source" defaultValue="DIRECT" className={inputClass}>
+          <select id="source" name="source" defaultValue={value("source")} className={inputClass}>
             {SOURCE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -91,7 +137,13 @@ export function ApplicationForm() {
           <label htmlFor="salaryMin" className="text-sm font-medium">
             Salary from <span className="font-normal text-zinc-500">(optional)</span>
           </label>
-          <input id="salaryMin" name="salaryMin" inputMode="numeric" className={inputClass} />
+          <input
+            id="salaryMin"
+            name="salaryMin"
+            inputMode="numeric"
+            defaultValue={value("salaryMin")}
+            className={inputClass}
+          />
           <FieldError messages={state.errors?.salaryMin} />
         </div>
 
@@ -99,7 +151,13 @@ export function ApplicationForm() {
           <label htmlFor="salaryMax" className="text-sm font-medium">
             Salary to <span className="font-normal text-zinc-500">(optional)</span>
           </label>
-          <input id="salaryMax" name="salaryMax" inputMode="numeric" className={inputClass} />
+          <input
+            id="salaryMax"
+            name="salaryMax"
+            inputMode="numeric"
+            defaultValue={value("salaryMax")}
+            className={inputClass}
+          />
           <FieldError messages={state.errors?.salaryMax} />
         </div>
 
@@ -107,7 +165,13 @@ export function ApplicationForm() {
           <label htmlFor="appliedAt" className="text-sm font-medium">
             Applied on <span className="font-normal text-zinc-500">(optional)</span>
           </label>
-          <input id="appliedAt" name="appliedAt" type="date" className={inputClass} />
+          <input
+            id="appliedAt"
+            name="appliedAt"
+            type="date"
+            defaultValue={value("appliedAt")}
+            className={inputClass}
+          />
           <FieldError messages={state.errors?.appliedAt} />
         </div>
 
@@ -115,7 +179,13 @@ export function ApplicationForm() {
           <label htmlFor="followUpAt" className="text-sm font-medium">
             Follow up on <span className="font-normal text-zinc-500">(optional)</span>
           </label>
-          <input id="followUpAt" name="followUpAt" type="date" className={inputClass} />
+          <input
+            id="followUpAt"
+            name="followUpAt"
+            type="date"
+            defaultValue={value("followUpAt")}
+            className={inputClass}
+          />
           <FieldError messages={state.errors?.followUpAt} />
         </div>
       </div>
@@ -124,7 +194,12 @@ export function ApplicationForm() {
         <label htmlFor="postingUrl" className="text-sm font-medium">
           Link to the posting <span className="font-normal text-zinc-500">(optional)</span>
         </label>
-        <input id="postingUrl" name="postingUrl" className={inputClass} />
+        <input
+          id="postingUrl"
+          name="postingUrl"
+          defaultValue={value("postingUrl")}
+          className={inputClass}
+        />
         <FieldError messages={state.errors?.postingUrl} />
       </div>
 
@@ -132,7 +207,13 @@ export function ApplicationForm() {
         <label htmlFor="notes" className="text-sm font-medium">
           Notes <span className="font-normal text-zinc-500">(optional)</span>
         </label>
-        <textarea id="notes" name="notes" rows={4} className={inputClass} />
+        <textarea
+          id="notes"
+          name="notes"
+          rows={4}
+          defaultValue={value("notes")}
+          className={inputClass}
+        />
         <FieldError messages={state.errors?.notes} />
       </div>
 
@@ -148,12 +229,26 @@ export function ApplicationForm() {
           disabled={isPending}
           className="rounded-md bg-zinc-900 px-4 py-2 font-medium text-zinc-50 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
         >
-          {isPending ? "Saving…" : "Save application"}
+          {isPending ? "Saving…" : submitLabel}
         </button>
-        <Link href="/applications" className="text-sm text-zinc-600 dark:text-zinc-400">
+        <Link href={cancelHref} className="text-sm text-zinc-600 dark:text-zinc-400">
           Cancel
         </Link>
       </div>
     </form>
   );
 }
+
+/** Empty form, used when creating. */
+export const EMPTY_APPLICATION: ApplicationFormValues = {
+  companyName: "",
+  role: "",
+  status: "DRAFT",
+  source: "DIRECT",
+  salaryMin: "",
+  salaryMax: "",
+  postingUrl: "",
+  notes: "",
+  appliedAt: "",
+  followUpAt: "",
+};

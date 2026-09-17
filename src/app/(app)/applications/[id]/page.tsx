@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { DeleteApplicationButton } from "@/components/delete-application-button";
 import { StatusBadge } from "@/components/status-badge";
+import { deleteApplication } from "@/lib/applications/actions";
 import { findApplication } from "@/lib/applications/queries";
 import { getSession } from "@/lib/auth/cookies";
 
@@ -85,6 +87,16 @@ export default async function ApplicationDetailPage({ params }: PageProps<"/appl
             <p className="text-zinc-600 dark:text-zinc-400">{application.company.name}</p>
           </div>
           <StatusBadge status={application.status} />
+        </div>
+
+        <div className="flex items-center gap-4">
+          <Link
+            href={`/applications/${application.id}/edit`}
+            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium dark:border-zinc-700"
+          >
+            Edit
+          </Link>
+          <DeleteApplicationButton action={deleteApplication.bind(null, application.id)} />
         </div>
       </div>
 
