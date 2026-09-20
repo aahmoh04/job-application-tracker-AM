@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import type { Status } from "@/generated/prisma/enums";
 import { getSession } from "@/lib/auth/cookies";
 import { prisma } from "@/lib/db";
+import { canTransition } from "@/lib/pipeline/transitions";
 import { applicationFormData, applicationSchema } from "@/lib/validation/application";
 
 export type ApplicationFormState = {
@@ -104,6 +106,17 @@ export async function updateApplication(
   }
 
   const { companyName, status, ...fields } = parsed.data;
+
+  // The dropdown only offers reachable statuses, but a form post is just data
+  // and can carry anything. The rule is enforced here, where it cannot be
+  // bypassed, and offered in the UI only as a convenience.
+  if (!canTransition(existing.status, status)) {
+    return {
+      errors: { status: [`An application cannot move from ${existing.status} to ${status}.`] },
+      values: raw,
+    };
+  }
+
   const company = await upsertCompany(companyName);
   const statusChanged = status !== existing.status;
 
@@ -138,4 +151,39 @@ export async function deleteApplication(id: string): Promise<void> {
 
   revalidatePath("/applications");
   redirect("/applications");
+}
+
+/**
+ * A single move along the pipeline, for the buttons on the detail page. No
+ * form, no validation of the other fields, just this one step.
+ */
+export async function advanceStatus(id: string, to: Status): Promise<void> {
+  const userId = await requireUserId();
+
+  const existing = await prisma.application.findFirst({
+    where: { id, userId },
+    select: { id: true, status: true },
+  });
+
+  if (!existing) {
+    redirect("/applications");
+  }
+
+  // `to` is bound server-side, so it cannot be tampered with from the browser.
+  // Checked anyway, because the record may have moved on in another tab since
+  // this page was rendered.
+  if (!canTransition(existing.status, to) || existing.status === to) {
+    redirect(`/applications/${existing.id}`);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.application.update({ where: { id: existing.id }, data: { status: to } });
+    await tx.statusEvent.create({
+      data: { applicationId: existing.id, from: existing.status, to },
+    });
+  });
+
+  revalidatePath("/applications");
+  revalidatePath(`/applications/${existing.id}`);
+  redirect(`/applications/${existing.id}`);
 }

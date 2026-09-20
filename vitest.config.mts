@@ -1,6 +1,16 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // Next understands "@/..." because tsconfig says so, but Vitest does not read
+  // tsconfig paths. Until now no test needed it, the auth test imports its
+  // neighbour relatively. The pipeline test imports the generated Prisma enums,
+  // so the alias has to be spelled out once, here.
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   test: {
     // No DOM needed, these are plain functions.
     environment: "node",
