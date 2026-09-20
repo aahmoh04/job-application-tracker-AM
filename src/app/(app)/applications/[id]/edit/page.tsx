@@ -4,6 +4,7 @@ import { ApplicationForm, type ApplicationFormValues } from "../../application-f
 import { updateApplication } from "@/lib/applications/actions";
 import { findApplication } from "@/lib/applications/queries";
 import { getSession } from "@/lib/auth/cookies";
+import { nextStatuses } from "@/lib/pipeline/transitions";
 
 export const metadata: Metadata = {
   title: "Edit application",
@@ -60,6 +61,7 @@ export default async function EditApplicationPage({
         defaultValues={defaultValues}
         submitLabel="Save changes"
         cancelHref={`/applications/${application.id}`}
+        allowedStatuses={nextStatuses(application.status)}
       />
     </main>
   );

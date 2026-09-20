@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import type { Status } from "@/generated/prisma/enums";
 import type { ApplicationFormState } from "@/lib/applications/actions";
 
 /**
@@ -64,10 +65,30 @@ type Props = {
   defaultValues: ApplicationFormValues;
   submitLabel: string;
   cancelHref: string;
+  /**
+   * Which statuses this application can actually move to. Undefined while
+   * creating, where every status is a valid starting point.
+   */
+  allowedStatuses?: readonly Status[];
 };
 
-export function ApplicationForm({ action, defaultValues, submitLabel, cancelHref }: Props) {
+export function ApplicationForm({
+  action,
+  defaultValues,
+  submitLabel,
+  cancelHref,
+  allowedStatuses,
+}: Props) {
   const [state, formAction, isPending] = useActionState(action, initialState);
+
+  // Narrowing the dropdown is a courtesy, not a guard. The server checks the
+  // same rule again, because a form post can carry anything.
+  const statusOptions = allowedStatuses
+    ? STATUS_OPTIONS.filter(
+        (option) =>
+          option.value === defaultValues.status || allowedStatuses.includes(option.value as Status),
+      )
+    : STATUS_OPTIONS;
 
   // What came back from a failed submit wins over the stored record, so a
   // rejected form shows what the user typed and not what is in the database.
@@ -110,7 +131,7 @@ export function ApplicationForm({ action, defaultValues, submitLabel, cancelHref
             Status
           </label>
           <select id="status" name="status" defaultValue={value("status")} className={inputClass}>
-            {STATUS_OPTIONS.map((option) => (
+            {statusOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
