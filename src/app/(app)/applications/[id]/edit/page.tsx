@@ -44,8 +44,10 @@ export default async function EditApplicationPage({
     followUpAt: toDateInput(application.followUpAt),
   };
 
-  // Binding happens here, on the server. The id is part of the action rather
-  // than a hidden field, so it never passes through the browser as plain text.
+  // Binding saves the form a field for the id. It is a convenience and not a
+  // protection, because React writes bound arguments into the page as a hidden
+  // field and they come back like any other input. The action parses the id and
+  // looks it up together with the user id again.
   const action = updateApplication.bind(null, application.id);
 
   return (

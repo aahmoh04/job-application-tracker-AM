@@ -7,7 +7,12 @@ import type { Status } from "@/generated/prisma/enums";
 import { getSession } from "@/lib/auth/cookies";
 import { prisma } from "@/lib/db";
 import { canTransition } from "@/lib/pipeline/transitions";
-import { applicationFormData, applicationSchema } from "@/lib/validation/application";
+import {
+  applicationFormData,
+  applicationIdSchema,
+  applicationSchema,
+  statusSchema,
+} from "@/lib/validation/application";
 
 export type ApplicationFormState = {
   errors?: Record<string, string[] | undefined>;
@@ -33,6 +38,20 @@ async function requireUserId(): Promise<string> {
   }
 
   return session.userId;
+}
+
+/**
+ * Arguments passed in through `bind` look like they come from the server, but
+ * they do not stay there. React writes them into the page as a hidden form
+ * field, the browser sends them back with the request, and anyone can change
+ * them on the way. They are decoded from JSON too, so an id can arrive as an
+ * object, and Prisma would read `{ not: "" }` as a filter that matches every
+ * application of the user. The parameter types do not stop that, TypeScript
+ * is gone by the time a request arrives. So these are parsed like form input.
+ */
+function parseApplicationId(value: unknown): string | null {
+  const parsed = applicationIdSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 /** Search for the company, create it if new. One statement, so two requests
@@ -84,11 +103,16 @@ export async function updateApplication(
   formData: FormData,
 ): Promise<ApplicationFormState> {
   const userId = await requireUserId();
+  const applicationId = parseApplicationId(id);
+
+  if (!applicationId) {
+    redirect("/applications");
+  }
 
   // Load with the user id in the where clause, exactly like every read. If the
   // row belongs to someone else it is not found, and nothing below runs.
   const existing = await prisma.application.findFirst({
-    where: { id, userId },
+    where: { id: applicationId, userId },
     select: { id: true, status: true },
   });
 
@@ -142,12 +166,19 @@ export async function updateApplication(
 
 export async function deleteApplication(id: string): Promise<void> {
   const userId = await requireUserId();
+  const applicationId = parseApplicationId(id);
+
+  // Matters most here. Without the parsing, an id sent as `{ not: "" }` would
+  // turn this into "delete every application of this user".
+  if (!applicationId) {
+    redirect("/applications");
+  }
 
   // deleteMany rather than delete, because it takes a full where clause and
   // simply affects zero rows when the id belongs to someone else. `delete`
   // only accepts a unique field and would throw on a foreign id, which means
   // writing the ownership check separately and being able to forget it.
-  await prisma.application.deleteMany({ where: { id, userId } });
+  await prisma.application.deleteMany({ where: { id: applicationId, userId } });
 
   revalidatePath("/applications");
   redirect("/applications");
@@ -159,9 +190,14 @@ export async function deleteApplication(id: string): Promise<void> {
  */
 export async function advanceStatus(id: string, to: Status): Promise<void> {
   const userId = await requireUserId();
+  const applicationId = parseApplicationId(id);
+
+  if (!applicationId) {
+    redirect("/applications");
+  }
 
   const existing = await prisma.application.findFirst({
-    where: { id, userId },
+    where: { id: applicationId, userId },
     select: { id: true, status: true },
   });
 
@@ -169,17 +205,23 @@ export async function advanceStatus(id: string, to: Status): Promise<void> {
     redirect("/applications");
   }
 
-  // `to` is bound server-side, so it cannot be tampered with from the browser.
-  // Checked anyway, because the record may have moved on in another tab since
-  // this page was rendered.
-  if (!canTransition(existing.status, to) || existing.status === to) {
+  // `to` travels through the browser just like the id, so it is parsed and then
+  // held against the rules. The same check also catches a page that was
+  // rendered before the application moved on in another tab.
+  const target = statusSchema.safeParse(to);
+
+  if (
+    !target.success ||
+    target.data === existing.status ||
+    !canTransition(existing.status, target.data)
+  ) {
     redirect(`/applications/${existing.id}`);
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.application.update({ where: { id: existing.id }, data: { status: to } });
+    await tx.application.update({ where: { id: existing.id }, data: { status: target.data } });
     await tx.statusEvent.create({
-      data: { applicationId: existing.id, from: existing.status, to },
+      data: { applicationId: existing.id, from: existing.status, to: target.data },
     });
   });
 

@@ -34,6 +34,14 @@ const optionalDate = z
   })
   .optional();
 
+/**
+ * For arguments that reach an action through `bind` or a direct call. They are
+ * client input just like form fields, only less obviously so. See the note in
+ * lib/applications/actions.ts.
+ */
+export const applicationIdSchema = z.string().min(1);
+export const statusSchema = z.enum(Status);
+
 export const applicationSchema = z
   .object({
     companyName: z
@@ -42,7 +50,7 @@ export const applicationSchema = z
       .min(1, "Which company is this for?")
       .max(200, "That name is unusually long."),
     role: z.string().trim().min(1, "What role did you apply for?").max(200),
-    status: z.enum(Status),
+    status: statusSchema,
     source: z.enum(Source),
     salaryMin: optionalMoney,
     salaryMax: optionalMoney,
