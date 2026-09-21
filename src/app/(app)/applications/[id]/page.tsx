@@ -116,8 +116,8 @@ export default async function ApplicationDetailPage({ params }: PageProps<"/appl
           <div className="flex flex-wrap gap-2">
             {nextStatuses(application.status).map((status) => (
               // One form per button, because each carries a different target.
-              // The status is bound on the server, so the browser never gets to
-              // say where this application is allowed to end up.
+              // The target is bound here but still travels through the browser,
+              // which is why the action checks it against the rules again.
               <form key={status} action={advanceStatus.bind(null, application.id, status)}>
                 <button
                   type="submit"
