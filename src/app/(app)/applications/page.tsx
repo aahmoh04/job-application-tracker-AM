@@ -73,7 +73,7 @@ export default async function ApplicationsPage() {
                 <StatusBadge status={application.status} />
 
                 <span className="w-24 shrink-0 text-right text-sm text-zinc-500">
-                  {application.appliedAt ? dateFormat.format(application.appliedAt) : "—"}
+                  {application.appliedAt ? dateFormat.format(application.appliedAt) : "Not set"}
                 </span>
               </Link>
             </li>
