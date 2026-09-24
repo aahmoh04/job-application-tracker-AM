@@ -21,19 +21,19 @@ This project is built in public, one milestone at a time. The sections below des
 
 | # | Milestone | Status |
 |---|---|---|
-| 00 | Project setup, TypeScript, CI | ✅ |
-| 01 | Data model, PostgreSQL, Prisma | ✅ |
-| 02 | Credentials auth (JWT in httpOnly cookies) | ✅ |
-| 03 | OAuth sign-in (GitHub) | ✅ |
-| 04 | Application CRUD with validated forms | ✅ |
-| 05 | Status pipeline and event history | ⬜ |
-| 06 | Redis rate limiting and caching | ⬜ |
-| 07 | Follow-up reminders via email | ⬜ |
-| 08 | Analytics dashboard | ⬜ |
-| 09 | Role-based access control | ⬜ |
-| 10 | Deployment and hardening | ⬜ |
+| 00 | Project setup, TypeScript, CI | [x] |
+| 01 | Data model, PostgreSQL, Prisma | [x] |
+| 02 | Credentials auth (JWT in httpOnly cookies) | [x] |
+| 03 | OAuth sign-in (GitHub) | [x] |
+| 04 | Application CRUD with validated forms | [x] |
+| 05 | Status pipeline and event history | [~] |
+| 06 | Redis rate limiting and caching | [ ] |
+| 07 | Follow-up reminders via email | [ ] |
+| 08 | Analytics dashboard | [ ] |
+| 09 | Role-based access control | [ ] |
+| 10 | Deployment and hardening | [ ] |
 
-⬜ planned · 🟨 in progress · ✅ done
+[ ] planned | [~] in progress | [x] done
 
 ---
 
@@ -54,10 +54,10 @@ So the tracker is built around three things a spreadsheet cannot do. It models a
 Every application is a record with a company, a role, a source, a salary range, a link to the posting and free-form notes. It sits in exactly one status at a time and moves along a defined pipeline.
 
 ```
-DRAFT → APPLIED → SCREENING → INTERVIEW → OFFER → ACCEPTED
-                       ↓           ↓         ↓
-                    REJECTED   REJECTED  DECLINED
-                       ↓
+DRAFT -> APPLIED -> SCREENING -> INTERVIEW -> OFFER -> ACCEPTED
+                        v            v          v
+                    REJECTED     REJECTED   DECLINED
+                        v
                     WITHDRAWN (available from any active status)
 ```
 
@@ -305,17 +305,17 @@ tests/
 
 Shipping order, one milestone at a time. The numbers match the status table above and the issues in this repo.
 
-- **M00 Foundation** — Next.js with strict TypeScript, ESLint, Prettier, GitHub Actions running lint, typecheck and build on every push
-- **M01 Data model** — Prisma schema, first migration, seed script, Docker Compose for Postgres and Redis
-- **M02 Credentials auth** — registration, Argon2id hashing, JWT session in an httpOnly cookie, middleware route guard
-- **M03 OAuth** — GitHub sign-in, authorization code flow with PKCE, account linking onto an existing verified email
-- **M04 Applications** — create, read, update, delete, Zod validation on both sides, ownership enforced in the query itself rather than checked afterwards
-- **M05 Pipeline** — transition rules as a typed state machine, StatusEvent history, Kanban board with drag and drop
-- **M06 Redis** — sliding-window rate limiter on auth, cached dashboard aggregates with event-driven invalidation
-- **M07 Reminders** — daily cron sweep, idempotent sending, React Email templates through Resend
-- **M08 Analytics** — funnel, response rate by source, time in stage, quiet-application ranking
-- **M09 RBAC** — admin role, operations view, server-side enforcement on every mutation
-- **M10 Ship** — deploy to Vercel with a managed Postgres and Redis, seed a demo account, add screenshots here
+- **M00 Foundation.** Next.js with strict TypeScript, ESLint, Prettier, GitHub Actions running lint, typecheck and build on every push
+- **M01 Data model.** Prisma schema, first migration, seed script, Docker Compose for Postgres and Redis
+- **M02 Credentials auth.** Registration, Argon2id hashing, JWT session in an httpOnly cookie, middleware route guard
+- **M03 OAuth.** GitHub sign-in, authorization code flow with PKCE, account linking onto an existing verified email
+- **M04 Applications.** Create, read, update, delete, Zod validation on both sides, ownership enforced in the query itself rather than checked afterwards
+- **M05 Pipeline.** Transition rules as a typed state machine, StatusEvent history, Kanban board with drag and drop
+- **M06 Redis.** Sliding-window rate limiter on auth, cached dashboard aggregates with event-driven invalidation
+- **M07 Reminders.** Daily cron sweep, idempotent sending, React Email templates through Resend
+- **M08 Analytics.** Funnel, response rate by source, time in stage, quiet-application ranking
+- **M09 RBAC.** Admin role, operations view, server-side enforcement on every mutation
+- **M10 Ship.** Deploy to Vercel with a managed Postgres and Redis, seed a demo account, add screenshots here
 
 ### Later, if the core holds up
 

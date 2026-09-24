@@ -85,7 +85,7 @@ export default async function ApplicationDetailPage({ params }: PageProps<"/appl
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-6 py-12">
       <div className="flex flex-col gap-3">
         <Link href="/applications" className="text-sm text-zinc-600 dark:text-zinc-400">
-          ← All applications
+          Back to all applications
         </Link>
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
@@ -137,12 +137,12 @@ export default async function ApplicationDetailPage({ params }: PageProps<"/appl
 
       <dl className="grid gap-5 rounded-lg border border-zinc-200 p-5 sm:grid-cols-2 dark:border-zinc-800">
         <Detail label="Source">{application.source.replace("_", " ").toLowerCase()}</Detail>
-        <Detail label="Salary">{salary ?? "—"}</Detail>
+        <Detail label="Salary">{salary ?? "Not set"}</Detail>
         <Detail label="Applied on">
-          {application.appliedAt ? dateFormat.format(application.appliedAt) : "—"}
+          {application.appliedAt ? dateFormat.format(application.appliedAt) : "Not set"}
         </Detail>
         <Detail label="Follow up on">
-          {application.followUpAt ? dateFormat.format(application.followUpAt) : "—"}
+          {application.followUpAt ? dateFormat.format(application.followUpAt) : "Not set"}
         </Detail>
         <Detail label="Posting">
           {application.postingUrl ? (
@@ -155,7 +155,7 @@ export default async function ApplicationDetailPage({ params }: PageProps<"/appl
               Open
             </a>
           ) : (
-            "—"
+            "Not set"
           )}
         </Detail>
       </dl>
@@ -178,8 +178,8 @@ export default async function ApplicationDetailPage({ params }: PageProps<"/appl
                 {dateTimeFormat.format(event.createdAt)}
               </span>
               <span>
-                {event.from ? `${event.from} → ${event.to}` : event.to}
-                {event.note && <span className="text-zinc-500"> · {event.note}</span>}
+                {event.from ? `${event.from} -> ${event.to}` : event.to}
+                {event.note && <span className="text-zinc-500"> ({event.note})</span>}
               </span>
             </li>
           ))}
