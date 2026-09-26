@@ -184,16 +184,25 @@ export async function deleteApplication(id: string): Promise<void> {
   redirect("/applications");
 }
 
+type TransitionResult =
+  | { ok: true; id: string }
+  | { ok: false; reason: "not-found" }
+  | { ok: false; reason: "not-allowed"; id: string };
+
 /**
- * A single move along the pipeline, for the buttons on the detail page. No
- * form, no validation of the other fields, just this one step.
+ * One step along the pipeline, shared by the buttons on the detail page and the
+ * board. It decides and writes, but it does not answer the browser. That part
+ * differs between the two callers, one redirects and the other returns data.
  */
-export async function advanceStatus(id: string, to: Status): Promise<void> {
-  const userId = await requireUserId();
+async function transitionApplication(
+  userId: string,
+  id: unknown,
+  to: unknown,
+): Promise<TransitionResult> {
   const applicationId = parseApplicationId(id);
 
   if (!applicationId) {
-    redirect("/applications");
+    return { ok: false, reason: "not-found" };
   }
 
   const existing = await prisma.application.findFirst({
@@ -202,7 +211,7 @@ export async function advanceStatus(id: string, to: Status): Promise<void> {
   });
 
   if (!existing) {
-    redirect("/applications");
+    return { ok: false, reason: "not-found" };
   }
 
   // `to` travels through the browser just like the id, so it is parsed and then
@@ -215,7 +224,7 @@ export async function advanceStatus(id: string, to: Status): Promise<void> {
     target.data === existing.status ||
     !canTransition(existing.status, target.data)
   ) {
-    redirect(`/applications/${existing.id}`);
+    return { ok: false, reason: "not-allowed", id: existing.id };
   }
 
   await prisma.$transaction(async (tx) => {
@@ -225,7 +234,52 @@ export async function advanceStatus(id: string, to: Status): Promise<void> {
     });
   });
 
+  return { ok: true, id: existing.id };
+}
+
+/**
+ * For the buttons on the detail page. A form post, so the answer is a redirect
+ * back to the page, whether the move worked or not.
+ */
+export async function advanceStatus(id: string, to: Status): Promise<void> {
+  const userId = await requireUserId();
+  const result = await transitionApplication(userId, id, to);
+
+  if (!result.ok) {
+    redirect(result.reason === "not-found" ? "/applications" : `/applications/${result.id}`);
+  }
+
   revalidatePath("/applications");
-  revalidatePath(`/applications/${existing.id}`);
-  redirect(`/applications/${existing.id}`);
+  revalidatePath(`/applications/${result.id}`);
+  redirect(`/applications/${result.id}`);
+}
+
+export type MoveResult = { ok: true } | { ok: false; message: string };
+
+/**
+ * For the board, which calls this straight from the browser while a dragged
+ * card already sits in its new column. A redirect would reload the page under
+ * the user's hands, so this returns what happened and lets the board react.
+ */
+export async function moveApplication(id: string, to: Status): Promise<MoveResult> {
+  const userId = await requireUserId();
+  const result = await transitionApplication(userId, id, to);
+
+  // Revalidated in every case. When a move is refused, the board is usually out
+  // of date, and the fresh render puts the card where it really is.
+  revalidatePath("/applications");
+  revalidatePath("/applications/board");
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      message:
+        result.reason === "not-found"
+          ? "That application no longer exists."
+          : "That application has moved on in the meantime, so the board has been refreshed.",
+    };
+  }
+
+  revalidatePath(`/applications/${result.id}`);
+  return { ok: true };
 }

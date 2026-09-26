@@ -34,12 +34,20 @@ export default async function ApplicationsPage() {
             {applications.length === 0 ? "Nothing here yet." : `${applications.length} tracked.`}
           </p>
         </div>
-        <Link
-          href="/applications/new"
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          Add application
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/applications/board"
+            className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
+          >
+            Board
+          </Link>
+          <Link
+            href="/applications/new"
+            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            Add application
+          </Link>
+        </div>
       </div>
 
       {applications.length === 0 ? (
