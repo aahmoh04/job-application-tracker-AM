@@ -26,7 +26,7 @@ This project is built in public, one milestone at a time. The sections below des
 | 02 | Credentials auth (JWT in httpOnly cookies) | [x] |
 | 03 | OAuth sign-in (GitHub) | [x] |
 | 04 | Application CRUD with validated forms | [x] |
-| 05 | Status pipeline and event history | [~] |
+| 05 | Status pipeline and event history | [x] |
 | 06 | Redis rate limiting and caching | [ ] |
 | 07 | Follow-up reminders via email | [ ] |
 | 08 | Analytics dashboard | [ ] |
