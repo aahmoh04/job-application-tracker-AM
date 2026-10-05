@@ -269,6 +269,27 @@ npm run dev                   # http://localhost:3000
 | `npm run db:stop` | Stop them again |
 | `npm run db:seed` | Load demo data |
 
+### Deploying
+
+The production setup is Vercel for the app and a managed PostgreSQL such as Neon
+for the data. Redis is not needed until the rate limiting in M06.
+
+1. Create the database and copy its connection string. It needs `?sslmode=require`
+   at the end, the `pg` driver then verifies the server certificate.
+2. Register a second GitHub OAuth app whose callback is
+   `https://<your-domain>/api/auth/github/callback`. The local app keeps pointing
+   at localhost.
+3. Import the repository in Vercel and set the environment variables from the
+   table above. `NEXT_PUBLIC_APP_URL` is the public address without a trailing
+   slash.
+
+`vercel.json` runs `prisma migrate deploy` before `next build`, so every
+deployment carries its own schema changes to the database first. A deployment
+whose migration fails never goes live.
+
+`next.config.ts` adds a small set of security headers to every response. They
+are listed and explained in that file.
+
 ---
 
 ## Project structure
