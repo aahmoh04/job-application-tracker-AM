@@ -73,10 +73,16 @@ export default async function DashboardPage() {
         >
           Add application
         </Link>
+        <Link
+          href="/applications/board"
+          className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
+        >
+          Open board
+        </Link>
       </div>
 
       <p className="text-sm text-zinc-500">
-        The status pipeline with drag and drop arrives in M05, charts in M08.
+        Charts and conversion rates arrive with the analytics dashboard in M08.
       </p>
     </main>
   );
