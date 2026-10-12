@@ -24,7 +24,13 @@ export default function Home() {
       </div>
 
       <p className="text-sm text-zinc-500">
-        Milestone 02, credentials auth. Applications themselves arrive in M04.
+        Built in public, one milestone at a time.{" "}
+        <a
+          href="https://github.com/aahmoh04/job-application-tracker-AM"
+          className="underline underline-offset-4"
+        >
+          Source on GitHub
+        </a>
       </p>
     </main>
   );
