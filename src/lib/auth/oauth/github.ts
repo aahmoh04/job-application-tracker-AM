@@ -128,8 +128,9 @@ async function githubApi(path: string, accessToken: string): Promise<unknown> {
  * The `verified` check is the important line in this file. Anyone can put any
  * address into their GitHub profile. Only a verified one proves that they
  * actually control that mailbox, and we later use the address to link this
- * login to an existing account. Skipping the check would let someone take over
- * a password account by claiming its address on GitHub.
+ * login to an existing account. Skipping the check would let someone put a
+ * stranger's address on their own GitHub profile and sign into the account
+ * that address already has here.
  */
 export async function fetchGitHubIdentity(accessToken: string): Promise<GitHubIdentity | null> {
   const profile = await githubApi("/user", accessToken);

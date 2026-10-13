@@ -6,6 +6,7 @@ import {
   exchangeCodeForAccessToken,
   fetchGitHubIdentity,
 } from "@/lib/auth/oauth/github";
+import { canLinkByEmail } from "@/lib/auth/oauth/link";
 import { createSessionToken } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 
@@ -58,6 +59,12 @@ export async function GET(request: NextRequest) {
 
   const user = await linkOrCreateUser(identity.providerAccountId, identity.email);
 
+  // The address belongs to an account with a password. That account signs in
+  // with its password, GitHub is not attached to it.
+  if (!user) {
+    return failure(request, "oauth_account_exists");
+  }
+
   const sessionToken = await createSessionToken({ userId: user.id, role: user.role });
   await setSessionCookie(sessionToken);
 
@@ -74,8 +81,9 @@ export async function GET(request: NextRequest) {
  * Three cases, in this order:
  *
  * 1. This GitHub account signed in here before, use its user.
- * 2. Someone with this email already exists, attach GitHub to that account.
- *    Safe only because the address came back verified from GitHub.
+ * 2. Someone with this email already exists. Attach GitHub to that account
+ *    only if it has no password, see canLinkByEmail. Otherwise return null
+ *    and write nothing.
  * 3. Nobody matches, create a user without a password hash.
  */
 async function linkOrCreateUser(providerAccountId: string, email: string) {
@@ -92,15 +100,19 @@ async function linkOrCreateUser(providerAccountId: string, email: string) {
 
   const existingUser = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, role: true },
+    select: { id: true, role: true, passwordHash: true },
   });
 
   if (existingUser) {
+    if (!canLinkByEmail(existingUser)) {
+      return null;
+    }
+
     await prisma.account.create({
       data: { userId: existingUser.id, provider: PROVIDER, providerAccountId },
     });
 
-    return existingUser;
+    return { id: existingUser.id, role: existingUser.role };
   }
 
   return prisma.user.create({
