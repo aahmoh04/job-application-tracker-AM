@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { safeRedirectPath } from "@/lib/auth/redirect";
 import { OAuthButtons } from "../oauth-buttons";
 import { SignInForm } from "./sign-in-form";
 
@@ -23,8 +24,12 @@ const OAUTH_ERRORS: Record<string, string> = {
 };
 
 export default async function SignInPage({ searchParams }: PageProps<"/sign-in">) {
-  const { error } = await searchParams;
+  const { error, next } = await searchParams;
   const message = typeof error === "string" ? OAUTH_ERRORS[error] : undefined;
+
+  // The page the proxy turned the visitor away from. It only travels on from
+  // here, both ways of signing in check it again before they redirect.
+  const nextPath = safeRedirectPath(next);
 
   return (
     <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-8 px-6 py-24">
@@ -48,8 +53,8 @@ export default async function SignInPage({ searchParams }: PageProps<"/sign-in">
         </p>
       )}
 
-      <SignInForm />
-      <OAuthButtons />
+      <SignInForm next={nextPath} />
+      <OAuthButtons next={nextPath} />
     </main>
   );
 }

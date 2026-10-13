@@ -1,3 +1,4 @@
+import { followUpDueFilter } from "@/lib/applications/follow-up";
 import { prisma } from "@/lib/db";
 
 /**
@@ -52,4 +53,9 @@ export function findApplication(userId: string, id: string) {
 
 export function countApplications(userId: string) {
   return prisma.application.count({ where: { userId } });
+}
+
+/** Open applications whose follow-up date has passed, see lib/applications/follow-up.ts. */
+export function countDueFollowUps(userId: string, now: Date) {
+  return prisma.application.count({ where: { userId, ...followUpDueFilter(now) } });
 }

@@ -146,18 +146,37 @@ export async function updateApplication(
 
   // Both writes in one transaction. A status change that is saved without its
   // history entry would leave a timeline that quietly lies.
-  await prisma.$transaction(async (tx) => {
-    await tx.application.update({
-      where: { id: existing.id },
+  //
+  // The status the rule was checked against goes into the where clause. If a
+  // second tab moved the application between the read above and this write,
+  // the row no longer matches and nothing is saved. Otherwise both requests
+  // could pass the check against the same old status.
+  const saved = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.application.updateMany({
+      where: { id: existing.id, userId, status: existing.status },
       data: { ...fields, status, companyId: company.id },
     });
+
+    if (count === 0) {
+      return false;
+    }
 
     if (statusChanged) {
       await tx.statusEvent.create({
         data: { applicationId: existing.id, from: existing.status, to: status },
       });
     }
+
+    return true;
   });
+
+  if (!saved) {
+    return {
+      message:
+        "This application changed somewhere else while you were editing, nothing was saved. Reload the page to see where it stands now.",
+      values: raw,
+    };
+  }
 
   revalidatePath("/applications");
   revalidatePath(`/applications/${existing.id}`);
@@ -174,10 +193,10 @@ export async function deleteApplication(id: string): Promise<void> {
     redirect("/applications");
   }
 
-  // deleteMany rather than delete, because it takes a full where clause and
-  // simply affects zero rows when the id belongs to someone else. `delete`
-  // only accepts a unique field and would throw on a foreign id, which means
-  // writing the ownership check separately and being able to forget it.
+  // deleteMany rather than delete. Both accept the user id in the where clause,
+  // but `delete` throws when nothing matches, while `deleteMany` simply affects
+  // zero rows. A foreign id and a missing one end the same way, without a
+  // try/catch around it that someone could get wrong.
   await prisma.application.deleteMany({ where: { id: applicationId, userId } });
 
   revalidatePath("/applications");
@@ -227,12 +246,29 @@ async function transitionApplication(
     return { ok: false, reason: "not-allowed", id: existing.id };
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.application.update({ where: { id: existing.id }, data: { status: target.data } });
+  // Same guard as in updateApplication. The status checked above goes into the
+  // where clause, so a move made elsewhere in the meantime makes this one
+  // match nothing instead of slipping past the rules.
+  const moved = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.application.updateMany({
+      where: { id: existing.id, userId, status: existing.status },
+      data: { status: target.data },
+    });
+
+    if (count === 0) {
+      return false;
+    }
+
     await tx.statusEvent.create({
       data: { applicationId: existing.id, from: existing.status, to: target.data },
     });
+
+    return true;
   });
+
+  if (!moved) {
+    return { ok: false, reason: "not-allowed", id: existing.id };
+  }
 
   return { ok: true, id: existing.id };
 }

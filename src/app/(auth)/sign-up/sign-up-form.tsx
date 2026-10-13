@@ -29,6 +29,7 @@ export function SignUpForm() {
           type="email"
           autoComplete="email"
           required
+          defaultValue={state.values?.email}
           className="rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-900 dark:border-zinc-700 dark:focus:border-zinc-100"
         />
         <FieldError messages={state.errors?.email} />

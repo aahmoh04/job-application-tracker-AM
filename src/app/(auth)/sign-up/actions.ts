@@ -15,26 +15,32 @@ export type SignUpState = {
     password?: string[];
     confirmPassword?: string[];
   };
+  /** The email as typed, so a failed attempt does not empty the field. Never the passwords. */
+  values?: { email: string };
 };
 
 export async function signUp(_prevState: SignUpState, formData: FormData): Promise<SignUpState> {
-  // Never trust the client. The browser ran the same schema, but nothing stops
-  // anyone from posting straight to this endpoint with whatever they like.
+  const values = { email: (formData.get("email") ?? "").toString() };
+
+  // The only check there is. The form switches off the browser's own
+  // validation with noValidate, and nothing stops anyone from posting straight
+  // to this endpoint with whatever they like.
   const parsed = signUpSchema.safeParse({
-    email: formData.get("email"),
+    email: values.email,
     password: formData.get("password"),
     confirmPassword: formData.get("confirmPassword"),
   });
 
   if (!parsed.success) {
-    return { errors: z.flattenError(parsed.error).fieldErrors };
+    return { errors: z.flattenError(parsed.error).fieldErrors, values };
   }
 
   const { email, password } = parsed.data;
 
-  // Hash before touching the database, deliberately. Doing it the other way
-  // round would make the response measurably faster for an email that is
-  // already taken, which is a timing side channel.
+  // Hash before touching the database, so a taken address does not answer
+  // measurably faster. Right now that protects nothing, because the error
+  // below says openly that the address is taken. It starts to matter once
+  // sign-up confirms addresses by mail and can stop saying so.
   const passwordHash = await hashPassword(password);
 
   let user;
@@ -45,7 +51,7 @@ export async function signUp(_prevState: SignUpState, formData: FormData): Promi
     // P2002 is Prisma's code for a unique constraint violation. Here that can
     // only be the email, since it is the single unique column on User.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return { errors: { email: ["An account with this email already exists."] } };
+      return { errors: { email: ["An account with this email already exists."] }, values };
     }
     throw error;
   }

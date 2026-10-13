@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { countApplications } from "@/lib/applications/queries";
+import { countApplications, countDueFollowUps } from "@/lib/applications/queries";
 import { getSession } from "@/lib/auth/cookies";
 import { prisma } from "@/lib/db";
 
@@ -26,9 +26,7 @@ export default async function DashboardPage() {
       select: { email: true, role: true },
     }),
     countApplications(session.userId),
-    prisma.application.count({
-      where: { userId: session.userId, followUpAt: { lt: new Date() } },
-    }),
+    countDueFollowUps(session.userId, new Date()),
   ]);
 
   if (!user) {

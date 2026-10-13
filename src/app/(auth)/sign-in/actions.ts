@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { setSessionCookie } from "@/lib/auth/cookies";
 import { verifyPassword } from "@/lib/auth/password";
+import { safeRedirectPath } from "@/lib/auth/redirect";
 import { createSessionToken } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { signInSchema } from "@/lib/validation/auth";
@@ -23,16 +24,23 @@ export type SignInState = {
     password?: string[];
   };
   message?: string;
+  /** The email as typed. Never the password, that one does not go back to the page. */
+  values?: { email: string };
 };
 
 export async function signIn(_prevState: SignInState, formData: FormData): Promise<SignInState> {
+  // React resets a form once its action has run. Sending the address back
+  // lets the form show it again, so a mistyped password does not cost the
+  // email as well.
+  const values = { email: (formData.get("email") ?? "").toString() };
+
   const parsed = signInSchema.safeParse({
-    email: formData.get("email"),
+    email: values.email,
     password: formData.get("password"),
   });
 
   if (!parsed.success) {
-    return { errors: z.flattenError(parsed.error).fieldErrors };
+    return { errors: z.flattenError(parsed.error).fieldErrors, values };
   }
 
   const { email, password } = parsed.data;
@@ -43,7 +51,7 @@ export async function signIn(_prevState: SignInState, formData: FormData): Promi
   // One message for every failure. Never "no such account" or "wrong password",
   // because either one confirms whether an address is registered.
   if (!user || !user.passwordHash || !passwordMatches) {
-    return { message: "Email or password is incorrect." };
+    return { message: "Email or password is incorrect.", values };
   }
 
   const token = await createSessionToken({ userId: user.id, role: user.role });
@@ -51,5 +59,5 @@ export async function signIn(_prevState: SignInState, formData: FormData): Promi
 
   // Outside any try/catch. redirect() works by throwing a special error that
   // Next catches itself, so swallowing it would break the redirect.
-  redirect("/dashboard");
+  redirect(safeRedirectPath(formData.get("next")));
 }

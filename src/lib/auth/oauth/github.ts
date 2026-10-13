@@ -16,6 +16,7 @@ const SCOPE = "read:user user:email";
 
 export const OAUTH_STATE_COOKIE = "github_oauth_state";
 export const OAUTH_VERIFIER_COOKIE = "github_oauth_verifier";
+export const OAUTH_NEXT_COOKIE = "github_oauth_next";
 export const OAUTH_COOKIE_MAX_AGE_SECONDS = 60 * 10; // ten minutes to finish
 
 function requireEnv(name: string): string {

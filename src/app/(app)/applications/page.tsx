@@ -2,18 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
+import { isFollowUpDue } from "@/lib/applications/follow-up";
 import { listApplications } from "@/lib/applications/queries";
 import { getSession } from "@/lib/auth/cookies";
+import { dateFormat } from "@/lib/format";
 
 export const metadata: Metadata = {
   title: "Applications",
 };
-
-const dateFormat = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
 
 export default async function ApplicationsPage() {
   const session = await getSession();
@@ -24,6 +20,7 @@ export default async function ApplicationsPage() {
 
   // The user id goes into the query, not into a check afterwards.
   const applications = await listApplications(session.userId);
+  const now = new Date();
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-12">
@@ -72,7 +69,7 @@ export default async function ApplicationsPage() {
                   </span>
                 </div>
 
-                {application.followUpAt && application.followUpAt < new Date() && (
+                {isFollowUpDue(application, now) && (
                   <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-400">
                     Follow-up due
                   </span>

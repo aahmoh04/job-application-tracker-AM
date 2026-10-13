@@ -14,13 +14,30 @@ const optionalText = z
   .transform((value) => (value === "" ? undefined : value))
   .optional();
 
-/** "45000" becomes 45000, "" becomes undefined, "abc" becomes an error. */
+/**
+ * Whole euros, written the way people write them. "45000", "45.000", "45,000"
+ * and "45 000" all mean forty-five thousand. A separator only counts when every
+ * group after it has exactly three digits and the same separator is used all
+ * the way through. "45.5" could be a decimal or a typo, and guessing would
+ * store a quietly wrong number, so it is refused instead.
+ */
+const WHOLE_EUROS = /^\d+$|^\d{1,3}([.,\s])\d{3}(?:\1\d{3})*$/;
+
+/** The largest value a Postgres integer holds, the type behind both salary columns. */
+const MAX_INT = 2_147_483_647;
+
+/** "45.000" becomes 45000, "" becomes undefined, "45.5" and "abc" become errors. */
 const optionalMoney = z
   .string()
   .trim()
-  .transform((value) => (value === "" ? undefined : Number(value)))
-  .refine((value) => value === undefined || (Number.isFinite(value) && value >= 0), {
-    message: "Enter a whole number, or leave it empty.",
+  .refine((value) => value === "" || WHOLE_EUROS.test(value), {
+    message: "Enter whole euros, like 45000 or 45.000, or leave it empty.",
+    // Stop here, the steps below only make sense for a well-formed number.
+    abort: true,
+  })
+  .transform((value) => (value === "" ? undefined : Number(value.replace(/[.,\s]/g, ""))))
+  .refine((value) => value === undefined || value <= MAX_INT, {
+    message: "That number is too large to store.",
   })
   .optional();
 

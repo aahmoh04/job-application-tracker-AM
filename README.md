@@ -61,7 +61,7 @@ DRAFT -> APPLIED -> SCREENING -> INTERVIEW -> OFFER -> ACCEPTED
 
 `WITHDRAWN` is reachable from every status that is not final yet. `ACCEPTED`, `REJECTED`, `DECLINED` and `WITHDRAWN` are final, nothing leads out of them.
 
-Transitions are not free. The server validates that the requested move is legal for the current status, so an application cannot jump from `DRAFT` straight to `OFFER` because a stale browser tab said so.
+Transitions are not free. The server validates that the requested move is legal for the current status, so an application cannot jump from `DRAFT` straight to `OFFER` because a stale browser tab said so. The write itself only matches while the status is still the one that was checked, so two tabs moving the same application at the same moment cannot both get through.
 
 Every transition is written to an append-only `StatusEvent` table. That gives each application a timeline you can read back, and it makes questions like "how many days do I usually sit in screening" answerable with a query instead of a memory.
 
@@ -69,7 +69,7 @@ A Kanban board renders the pipeline as columns with drag-and-drop between them. 
 
 ### Follow-up reminders (planned, M07)
 
-The data model is ready for this. Each application carries an optional `followUpAt` date, and the dashboard already counts every application whose follow-up date has passed. What is missing is the sender.
+The data model is ready for this. Each application carries an optional `followUpAt` date, and the dashboard already counts every open application whose follow-up date has passed. What is missing is the sender.
 
 A scheduled job will run daily, find everything that is due, and send one email per user summarizing what needs attention. The job is meant to be idempotent. A `reminderSentAt` timestamp per application, already in the schema, means a retry, a double-triggered cron or a redeploy mid-run cannot produce a second email for the same follow-up.
 
@@ -77,7 +77,7 @@ Emails will be transactional templates rendered with React Email and delivered t
 
 ### Analytics dashboard (planned, M08)
 
-Today the dashboard shows three numbers, the application count, the applications whose follow-up date has passed and the account role. The planned version aggregates over the application and event tables and renders charts.
+Today the dashboard shows three numbers, the application count, the open applications whose follow-up date has passed and the account role. The planned version aggregates over the application and event tables and renders charts.
 
 - Applications per week, stacked by current status
 - Conversion funnel from applied through screening and interview to offer
@@ -291,9 +291,11 @@ The production setup is Vercel for the app and a managed PostgreSQL such as Neon
 for the data. Redis is not needed until the rate limiting in M06.
 
 1. Create the database and copy its direct connection string, not the pooled
-   one, because `prisma migrate deploy` runs against it. It needs
-   `?sslmode=require` at the end, the `pg` driver then verifies the server
-   certificate.
+   one, because `prisma migrate deploy` runs against it. End it with
+   `?sslmode=verify-full`, so the `pg` driver checks the server certificate
+   and its host name. Neon hands out the string with `sslmode=require`, which
+   the driver treats the same way today, but its next major version switches
+   to the weaker libpq meaning that skips the certificate check.
 2. Register a second GitHub OAuth app for production. Its callback can be a
    placeholder for now. The local app keeps pointing at localhost.
 3. Import the repository in Vercel and set five environment variables,
@@ -328,11 +330,12 @@ src/
   components/             status badge, delete button
   generated/prisma/       Prisma client, generated and gitignored
   lib/
-    auth/                 sessions, Argon2id hashing, cookies, GitHub OAuth
-    applications/         queries and Server Actions, ownership in every where clause
+    auth/                 sessions, Argon2id hashing, cookies, redirects, GitHub OAuth
+    applications/         queries, Server Actions, the follow-up rule, ownership in every where clause
     pipeline/             transition rules, the state machine
     validation/           Zod schemas, parsed in the Server Actions
     db.ts                 Prisma client singleton
+    format.ts             date formats with an explicit time zone
   proxy.ts                route guard, the Next.js 16 name for middleware
 prisma/
   schema.prisma
