@@ -14,11 +14,13 @@ function FieldError({ messages }: { messages?: string[] }) {
   );
 }
 
-export function SignInForm() {
+export function SignInForm({ next }: { next: string }) {
   const [state, formAction, isPending] = useActionState(signIn, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-5" noValidate>
+      <input type="hidden" name="next" value={next} />
+
       {state.message && (
         <p
           className="rounded-md border border-red-600/30 bg-red-600/10 px-3 py-2 text-sm text-red-700 dark:text-red-400"
@@ -38,6 +40,7 @@ export function SignInForm() {
           type="email"
           autoComplete="email"
           required
+          defaultValue={state.values?.email}
           className="rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-900 dark:border-zinc-700 dark:focus:border-zinc-100"
         />
         <FieldError messages={state.errors?.email} />

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { isFollowUpDue } from "@/lib/applications/follow-up";
 import { listApplications } from "@/lib/applications/queries";
 import { getSession } from "@/lib/auth/cookies";
 import { KanbanBoard, type BoardCard } from "./kanban-board";
@@ -26,7 +27,7 @@ export default async function BoardPage() {
     role: application.role,
     company: application.company.name,
     status: application.status,
-    followUpDue: application.followUpAt !== null && application.followUpAt < now,
+    followUpDue: isFollowUpDue(application, now),
   }));
 
   return (

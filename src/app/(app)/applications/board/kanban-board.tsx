@@ -25,7 +25,7 @@ import { useOptimistic, useState, useTransition } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import type { Status } from "@/generated/prisma/enums";
 import { moveApplication } from "@/lib/applications/actions";
-import { canTransition } from "@/lib/pipeline/transitions";
+import { canTransition, isTerminal } from "@/lib/pipeline/transitions";
 
 export type BoardCard = {
   id: string;
@@ -111,10 +111,16 @@ export function KanbanBoard({ cards }: { cards: BoardCard[] }) {
   // The board shows this list, not `cards` directly. A move changes it at once,
   // and when the server has answered, React replaces it with whatever the fresh
   // render of the page says. A refused move therefore snaps back by itself.
+  // A card moved into a closed column drops its follow-up badge right away,
+  // the same way the server will count it.
   const [optimisticCards, applyMove] = useOptimistic(
     cards,
     (current, move: { id: string; to: Status }) =>
-      current.map((card) => (card.id === move.id ? { ...card, status: move.to } : card)),
+      current.map((card) =>
+        card.id === move.id
+          ? { ...card, status: move.to, followUpDue: card.followUpDue && !isTerminal(move.to) }
+          : card,
+      ),
   );
   const [isSaving, startTransition] = useTransition();
   const [activeId, setActiveId] = useState<string | null>(null);

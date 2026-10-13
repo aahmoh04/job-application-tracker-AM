@@ -1,12 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { setSessionCookie } from "@/lib/auth/cookies";
 import {
+  OAUTH_NEXT_COOKIE,
   OAUTH_STATE_COOKIE,
   OAUTH_VERIFIER_COOKIE,
   exchangeCodeForAccessToken,
   fetchGitHubIdentity,
 } from "@/lib/auth/oauth/github";
 import { canLinkByEmail } from "@/lib/auth/oauth/link";
+import { safeRedirectPath } from "@/lib/auth/redirect";
 import { createSessionToken } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 
@@ -68,11 +70,14 @@ export async function GET(request: NextRequest) {
   const sessionToken = await createSessionToken({ userId: user.id, role: user.role });
   await setSessionCookie(sessionToken);
 
-  const response = NextResponse.redirect(new URL("/dashboard", request.nextUrl.origin));
+  // Set by the start route, but checked again, it came back from the browser.
+  const next = safeRedirectPath(request.cookies.get(OAUTH_NEXT_COOKIE)?.value);
+  const response = NextResponse.redirect(new URL(next, request.nextUrl.origin));
 
-  // The two one-shot cookies have done their job.
+  // The one-shot cookies have done their job.
   response.cookies.delete(OAUTH_STATE_COOKIE);
   response.cookies.delete(OAUTH_VERIFIER_COOKIE);
+  response.cookies.delete(OAUTH_NEXT_COOKIE);
 
   return response;
 }

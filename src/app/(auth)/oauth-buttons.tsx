@@ -7,8 +7,13 @@
  * github.com. The router cannot navigate to a foreign origin, so it fails with
  * "TypeError: Failed to fetch" before the browser falls back to a real
  * navigation. An <a> leaves the app properly in the first place.
+ *
+ * `next` is the page to return to afterwards. The start route checks it before
+ * it holds on to it.
  */
-export function OAuthButtons() {
+export function OAuthButtons({ next }: { next?: string }) {
+  const href = next ? `/api/auth/github?${new URLSearchParams({ next })}` : "/api/auth/github";
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
@@ -18,7 +23,7 @@ export function OAuthButtons() {
       </div>
 
       <a
-        href="/api/auth/github"
+        href={href}
         className="flex items-center justify-center gap-2 rounded-md border border-zinc-300 px-4 py-2 font-medium dark:border-zinc-700"
       >
         <svg viewBox="0 0 16 16" aria-hidden="true" className="h-4 w-4 fill-current">

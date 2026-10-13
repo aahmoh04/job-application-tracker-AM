@@ -60,7 +60,7 @@ model User {
   applications Application[]
 }
 
-/// One row per linked OAuth provider. A user can have both Google and GitHub.
+/// One row per linked OAuth account. GitHub is the only provider so far.
 model Account {
   id                String   @id @default(cuid())
   userId            String
@@ -114,8 +114,9 @@ model Application {
   @@index([companyId])
 }
 
-/// Append-only. Never updated, never deleted. This is what makes the timeline
-/// trustworthy and time-in-stage analytics possible at all.
+/// Append-only. The code never updates or deletes an event, events only go
+/// away together with their application through the cascade. This is what
+/// makes the timeline trustworthy and time-in-stage analytics possible at all.
 model StatusEvent {
   id            String   @id @default(cuid())
   applicationId String

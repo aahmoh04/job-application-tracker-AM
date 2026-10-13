@@ -5,22 +5,9 @@ import { StatusBadge } from "@/components/status-badge";
 import { advanceStatus, deleteApplication } from "@/lib/applications/actions";
 import { findApplication } from "@/lib/applications/queries";
 import { getSession } from "@/lib/auth/cookies";
+import { dateFormat, dateTimeFormat } from "@/lib/format";
 import { isTerminal, nextStatuses, TRANSITION_LABELS } from "@/lib/pipeline/transitions";
 import type { Status } from "@/generated/prisma/enums";
-
-const dateFormat = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
-
-const dateTimeFormat = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
 
 const currencyFormat = new Intl.NumberFormat("en-GB", {
   style: "currency",

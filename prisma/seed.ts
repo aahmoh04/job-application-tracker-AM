@@ -39,7 +39,9 @@ async function main() {
   const user = await prisma.user.create({
     data: {
       email: "demo@example.com",
-      // Null on purpose. Password hashing arrives in M02.
+      // No password, so nobody can sign in as the demo user. Its data is there
+      // to look at in Prisma Studio, a demo account to sign in to is planned
+      // for M10.
       passwordHash: null,
     },
   });
