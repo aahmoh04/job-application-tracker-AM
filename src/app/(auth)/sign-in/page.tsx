@@ -16,6 +16,10 @@ const OAUTH_ERRORS: Record<string, string> = {
   oauth_exchange_failed: "GitHub did not accept the sign-in. Please try again.",
   oauth_no_verified_email:
     "Your GitHub account has no verified email address. Verify one on GitHub, then try again.",
+  // Specific on purpose. GitHub just confirmed that this visitor owns the
+  // address, so saying it is taken tells a stranger nothing.
+  oauth_account_exists:
+    "Your GitHub email already has an account with a password. Sign in with email and password instead.",
 };
 
 export default async function SignInPage({ searchParams }: PageProps<"/sign-in">) {
