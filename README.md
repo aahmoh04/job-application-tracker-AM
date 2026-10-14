@@ -12,6 +12,17 @@
 
 </div>
 
+There is no hosted instance, on purpose. The app stores email addresses, and running it in public would make me responsible for strangers' data. Everything below is written so you can see what it does and get your own copy running, [locally in a few minutes](#getting-started) with a demo account, or [on Vercel](#deploying-your-own-copy) if you want it online.
+
+![The board, one column per status, with the open applications on top and the closed ones below](docs/screenshots/board.png)
+
+<p>
+  <img src="docs/screenshots/applications.png" alt="The list of applications with their status and a badge for a due follow-up" width="49%">
+  <img src="docs/screenshots/application-detail.png" alt="One application with the moves it can make next, its details and its timeline" width="49%">
+</p>
+
+<sub>The demo data from the seed. Left the list with a due follow-up, right one application with its next steps and timeline.</sub>
+
 ---
 
 ## Build status
@@ -30,7 +41,7 @@ This project is built in public, one milestone at a time. The checklist is the h
 | 07 | Follow-up reminders via email | [ ] |
 | 08 | Analytics dashboard | [ ] |
 | 09 | Role-based access control | [ ] |
-| 10 | Deployment and hardening | [~] |
+| 10 | Deployment setup and hardening | [x] |
 
 [ ] planned | [~] in progress | [x] done
 
@@ -234,7 +245,8 @@ Two decisions worth calling out. `Company` is its own table rather than a string
 
 - Node.js 22 or newer
 - Docker, for the local PostgreSQL container. Compose starts Redis as well, the app uses it from M06
-- A [Resend](https://resend.com) API key, only needed once the reminder feature exists
+
+That is all. Running it locally needs no account anywhere, and GitHub sign-in is optional.
 
 ### Setup
 
@@ -242,14 +254,19 @@ Two decisions worth calling out. `Company` is its own table rather than a string
 git clone https://github.com/aahmoh04/job-application-tracker-AM.git
 cd job-application-tracker-AM
 
-cp .env.example .env          # then set JWT_SECRET, at least 32 characters
+cp .env.example .env          # then set JWT_SECRET, see below
 npm install                   # postinstall runs prisma generate, which reads DATABASE_URL from .env
 
 docker compose up -d          # starts postgres + redis
 npx prisma migrate dev        # applies migrations
+npx prisma db seed            # demo data and a demo account
 
 npm run dev                   # http://localhost:3000
 ```
+
+`JWT_SECRET` needs at least 32 characters, and `openssl rand -base64 48` prints one that is long enough.
+
+Then sign in as `demo@example.com` with the password `demo-password-123`. The demo account comes with seven applications spread across the pipeline, so the list, the board and the timelines have something to show. The seed wipes every table before it writes, so run it on a fresh database and never on one whose data you want to keep.
 
 ### Environment variables
 
@@ -264,8 +281,6 @@ npm run dev                   # http://localhost:3000
 | `CRON_SECRET` | Shared secret protecting the reminder endpoint, not used before M07 |
 
 For GitHub sign-in, create an OAuth app at github.com/settings/developers with the callback `http://localhost:3000/api/auth/github/callback` and put its two keys into `.env`. Email and password sign-in works without it.
-
-`npx prisma db seed` loads demo data, but it wipes every table first, so it belongs to a fresh database. The demo user `demo@example.com` has no password yet, so its data is only visible in Prisma Studio until M10 adds a demo account you can sign in to.
 
 `.env` is gitignored. `.env.example` holds the keys and is committed. Prisma reads `.env` through `prisma.config.ts`, Next.js reads it as well.
 
@@ -285,10 +300,12 @@ For GitHub sign-in, create an OAuth app at github.com/settings/developers with t
 | `npm run db:seed` | Wipe the database and load demo data |
 | `npm run db:studio` | Browse the database in the browser |
 
-### Deploying
+### Deploying your own copy
 
-The production setup is Vercel for the app and a managed PostgreSQL such as Neon
-for the data. Redis is not needed until the rate limiting in M06.
+There is no hosted instance, but nothing stops you from running one. It takes
+a PostgreSQL database, where the free plan at Neon is enough, a Vercel account
+on the free Hobby plan, and a second GitHub OAuth app if GitHub sign-in should
+work there too. Redis is not needed until the rate limiting in M06.
 
 1. Create the database in Frankfurt, `aws-eu-central-1` on Neon, which is where
    `vercel.json` runs the functions. Copy its direct connection string, not the
@@ -370,7 +387,7 @@ Shipping order, one milestone at a time. The numbers match the status table abov
 - **M07 Reminders.** Daily cron sweep, idempotent sending, React Email templates through Resend
 - **M08 Analytics.** Funnel, response rate by source, time in stage, quiet-application ranking
 - **M09 RBAC.** Admin role, operations view, server-side enforcement on every mutation
-- **M10 Ship.** Deploy to Vercel with a managed Postgres, seed a demo account, add screenshots here. Done so far are migrations inside the build and the security headers. Redis joins once M06 needs it
+- **M10 Ship.** Everything a deployment needs, without running a public instance. Migrations inside the build, security headers, functions pinned next to the database, preview builds kept away from production, a demo account in the seed and screenshots in this README. Redis joins once M06 needs it
 
 ### Later, if the core holds up
 
