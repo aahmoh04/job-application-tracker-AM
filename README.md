@@ -290,16 +290,18 @@ For GitHub sign-in, create an OAuth app at github.com/settings/developers with t
 The production setup is Vercel for the app and a managed PostgreSQL such as Neon
 for the data. Redis is not needed until the rate limiting in M06.
 
-1. Create the database and copy its direct connection string, not the pooled
-   one, because `prisma migrate deploy` runs against it. End it with
+1. Create the database in Frankfurt, `aws-eu-central-1` on Neon, which is where
+   `vercel.json` runs the functions. Copy its direct connection string, not the
+   pooled one, because `prisma migrate deploy` runs against it. End it with
    `?sslmode=verify-full`, so the `pg` driver checks the server certificate
    and its host name. Neon hands out the string with `sslmode=require`, which
    the driver treats the same way today, but its next major version switches
    to the weaker libpq meaning that skips the certificate check.
 2. Register a second GitHub OAuth app for production. Its callback can be a
    placeholder for now. The local app keeps pointing at localhost.
-3. Import the repository in Vercel and set five environment variables,
-   `DATABASE_URL`, `JWT_SECRET`, `NEXT_PUBLIC_APP_URL`, `GITHUB_CLIENT_ID` and
+3. Import the repository in Vercel and set five environment variables for the
+   Production environment only, `DATABASE_URL`, `JWT_SECRET`,
+   `NEXT_PUBLIC_APP_URL`, `GITHUB_CLIENT_ID` and
    `GITHUB_CLIENT_SECRET`. `NEXT_PUBLIC_APP_URL` is the public address without a
    trailing slash. The other variables in the table are not needed yet.
 4. After the first build, put the real address into the OAuth app as
@@ -309,6 +311,13 @@ for the data. Redis is not needed until the rate limiting in M06.
 `vercel.json` runs `prisma migrate deploy` before `next build`, so every
 deployment carries its own schema changes to the database first. A deployment
 whose migration fails never goes live.
+
+It also pins the functions to Frankfurt (`fra1`), next to the database. Every
+page runs several queries, and from the default region in the US each one
+would cross the Atlantic. Preview deployments are skipped through
+`ignoreCommand`. There is only one database, so a preview build would run the
+migrations of an unmerged pull request against production. Keeping the
+variables out of the Preview environment is the second lock on the same door.
 
 `next.config.ts` adds a small set of security headers to every response. They
 are listed and explained in that file.

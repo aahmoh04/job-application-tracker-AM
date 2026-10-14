@@ -1,4 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "prisma migrate deploy && next build"
+  "buildCommand": "prisma migrate deploy && next build",
+  "regions": ["fra1"],
+  "ignoreCommand": "[ \"$VERCEL_ENV\" = \"preview\" ]"
 }
