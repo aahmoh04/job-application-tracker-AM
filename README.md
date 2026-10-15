@@ -124,7 +124,7 @@ Planned on top of that.
 | Auth | jose, Argon2id | Signed JWT sessions without a session table, and the password hash recommended by OWASP |
 | Validation | Zod | One schema parses every form payload on the server and infers the TypeScript type from the same definition. The forms show the field errors the server sends back |
 | UI | Tailwind CSS 4, dnd-kit | Styles sit next to the markup and Prettier sorts the classes, dnd-kit handles drag and drop on the board |
-| Testing | Vitest | Unit tests on the session handling and the transition rules |
+| Testing | Vitest | Unit tests on the pure logic, and integration tests that run the analytics SQL against a real Postgres, locally in Docker and in CI as a service container |
 | Cache & rate limiting | Redis 7 (planned, M06) | Sliding-window counters on auth endpoints and a TTL cache for dashboard aggregates. Both need fast expiring keys, which is exactly what Redis is for |
 | Email | Resend + React Email (planned, M07) | Transactional delivery with templates written as components instead of hand-glued HTML strings |
 
@@ -293,7 +293,8 @@ For GitHub sign-in, create an OAuth app at github.com/settings/developers with t
 | `npm run lint` | ESLint |
 | `npm run typecheck` | Generates route types, then checks all types without emitting |
 | `npm run format:check` | Prettier check, the same one CI runs |
-| `npm run test` | Unit tests, Vitest |
+| `npm run test` | Unit tests, Vitest, no database needed |
+| `npm run test:integration` | Integration tests against Postgres, needs the Docker container. Creates the `jobtracker_test` database on first use and refuses any database whose name does not end in `_test`, because every test empties it |
 | `npm run db:up` | Start the Postgres and Redis containers |
 | `npm run db:stop` | Stop them again |
 | `npm run db:migrate` | Create and apply a migration in development |
@@ -369,7 +370,7 @@ prisma/
   seed.ts
 ```
 
-Tests sit next to the code they test, as `*.test.ts`.
+Tests sit next to the code they test, as `*.test.ts`. The ones that need a database end in `.int.test.ts`, and their helpers live in `src/test/`.
 
 ---
 
@@ -377,7 +378,7 @@ Tests sit next to the code they test, as `*.test.ts`.
 
 Shipping order, one milestone at a time. The numbers match the status table above.
 
-- **M00 Foundation.** Next.js with strict TypeScript, ESLint, Prettier, GitHub Actions running format check, lint, typecheck, tests and build on every push to main and every pull request
+- **M00 Foundation.** Next.js with strict TypeScript, ESLint, Prettier, GitHub Actions running format check, lint, typecheck, unit tests, integration tests against a Postgres service container and the build on every push to main and every pull request
 - **M01 Data model.** Prisma schema, first migration, seed script, Docker Compose for Postgres and Redis
 - **M02 Credentials auth.** Registration, Argon2id hashing, JWT session in an httpOnly cookie, route guard in the proxy
 - **M03 OAuth.** GitHub sign-in, authorization code flow with PKCE, linking by verified email onto accounts that have no password
