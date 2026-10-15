@@ -39,7 +39,7 @@ This project is built in public, one milestone at a time. The checklist is the h
 | 05 | Status pipeline and event history | [x] |
 | 06 | Redis rate limiting and caching | [ ] |
 | 07 | Follow-up reminders via email | [ ] |
-| 08 | Analytics dashboard | [ ] |
+| 08 | Analytics dashboard | [x] |
 | 09 | Role-based access control | [ ] |
 | 10 | Deployment setup and hardening | [x] |
 
@@ -53,7 +53,7 @@ I built this while job hunting myself.
 
 Somewhere around the twentieth application the spreadsheet stopped working. Two companies had the same name in different rows, one interview date sat in a calendar the sheet knew nothing about, and a recruiter who had asked me to follow up "in about two weeks" got no reply for five. A spreadsheet stores data. It does not remind you of anything and it has no idea that "applied" and "waiting for feedback for 18 days" are different situations that need different reactions from you.
 
-So the tracker is built around three things a spreadsheet cannot do. The first one runs today. It models an application as something that moves through states and remembers every move. The other two are next on the roadmap. It will watch the clock and email you before a follow-up goes stale (M07), and it will turn the whole pile into numbers, so you can see which channel actually produces interviews instead of guessing (M08).
+So the tracker is built around three things a spreadsheet cannot do. Two of them run today. It models an application as something that moves through states and remembers every move, and it turns the whole pile into numbers, so you can see which channel actually produces interviews instead of guessing. The third is next on the roadmap. It will watch the clock and email you before a follow-up goes stale (M07).
 
 ---
 
@@ -86,17 +86,19 @@ A scheduled job will run daily, find everything that is due, and send one email 
 
 Emails will be transactional templates rendered with React Email and delivered through Resend.
 
-### Analytics dashboard (planned, M08)
+### Analytics dashboard
 
-Today the dashboard shows three numbers, the application count, the open applications whose follow-up date has passed and the account role. The planned version aggregates over the application and event tables and renders charts.
+`/analytics` answers five questions about a search, each one from the user's own applications and their status history.
 
-- Applications per week, stacked by current status
-- Conversion funnel from applied through screening and interview to offer
-- Response rate and median time to first response, broken down by source
-- Average days spent in each pipeline stage
-- Active applications that have gone quiet, ranked by days since the last event
+- **Do I apply steadily?** Applications per week over the last twelve weeks, by the date they were sent, split into still open, accepted, rejected, and withdrawn or declined
+- **How far do my applications get?** A funnel from applied through screening and interview to offer, counted from the history, so an application rejected after the interview still counts for the interview
+- **Which channel gets answers?** Answer rate and the median days to the first answer, per source. The median, because one company that answers after four months would pull an average far away from the usual case
+- **Where do applications sit the longest?** Average days per stage, from consecutive status events with a `LAG` window function. Only stays that have ended count
+- **Where should I follow up?** Open applications without any event for at least a week, the longest silence first
 
-These queries will be the heaviest read path in the app, so the computed result is planned to be cached in Redis (M06) and invalidated whenever a `StatusEvent` is written for that user.
+![The analytics page with the weekly chart, the funnel, answers by source, days per stage and the quiet applications](docs/screenshots/analytics.png)
+
+All five are computed in Postgres with `$queryRaw`, because window functions, percentiles and `FILTER` are beyond Prisma's query API, and every value still goes in as a parameter. Integration tests run them against a real Postgres, see [Getting started](#getting-started). They are the heaviest read path in the app, so caching them in Redis is planned with M06, invalidated whenever a `StatusEvent` is written for that user.
 
 ### Accounts and access
 
@@ -119,7 +121,7 @@ Planned on top of that.
 |---|---|---|
 | Framework | Next.js 16, App Router | Server Components keep data fetching on the server, Server Actions remove the need for a separate REST layer for mutations |
 | Language | TypeScript, strict mode | The pipeline is a state machine. The transition table is typed against the status union, so a status added to the enum without rules breaks the build, and every move is checked at runtime because the status arrives from the browser |
-| Database | PostgreSQL 16 | Relational data with real foreign keys. Window functions are the planned tool for the funnel and time-in-stage queries (M08) |
+| Database | PostgreSQL 16 | Relational data with real foreign keys. Window functions and percentiles carry the analytics, `LAG` for the time in each stage and `percentile_cont` for the median response time |
 | ORM | Prisma 7 | Typed queries generated from the schema, and versioned migrations so the schema history is reviewable in git. Uses the `pg` driver adapter rather than a bundled engine |
 | Auth | jose, Argon2id | Signed JWT sessions without a session table, and the password hash recommended by OWASP |
 | Validation | Zod | One schema parses every form payload on the server and infers the TypeScript type from the same definition. The forms show the field errors the server sends back |
@@ -350,7 +352,8 @@ src/
     page.tsx              landing page
     (auth)/               sign-in and sign-up pages, form actions, OAuth buttons
     (app)/                everything behind a session, the layout checks it again
-      dashboard/          counts and shortcuts, charts arrive in M08
+      dashboard/          counts and shortcuts
+      analytics/          five questions about the search, answered in SQL
       applications/       list, detail, create, edit
         board/            Kanban board with drag and drop
     api/auth/github/      OAuth start, callback/ handles the way back
@@ -359,10 +362,12 @@ src/
   lib/
     auth/                 sessions, Argon2id hashing, cookies, redirects, GitHub OAuth
     applications/         queries, Server Actions, the follow-up rule, ownership in every where clause
+    analytics/            the SQL behind the analytics page, with its integration tests
     pipeline/             transition rules, the state machine
     validation/           Zod schemas, parsed in the Server Actions
     db.ts                 Prisma client singleton
     format.ts             date formats with an explicit time zone
+  test/                   database helpers and the global setup for the integration tests
   proxy.ts                route guard, the Next.js 16 name for middleware
 prisma/
   schema.prisma
@@ -386,7 +391,7 @@ Shipping order, one milestone at a time. The numbers match the status table abov
 - **M05 Pipeline.** Transition rules as a typed state machine, StatusEvent history, Kanban board with drag and drop
 - **M06 Redis.** Sliding-window rate limiter on auth, cached dashboard aggregates with event-driven invalidation
 - **M07 Reminders.** Daily cron sweep, idempotent sending, React Email templates through Resend
-- **M08 Analytics.** Funnel, response rate by source, time in stage, quiet-application ranking
+- **M08 Analytics.** Five questions answered in SQL, weekly volume, a funnel from the status history, answer rate and median response time by source, time in stage with `LAG`, quiet applications. Integration tests against Postgres, locally and in CI
 - **M09 RBAC.** Admin role, operations view, server-side enforcement on every mutation
 - **M10 Ship.** Everything a deployment needs, without running a public instance. Migrations inside the build, security headers, functions pinned next to the database, preview builds kept away from production, a demo account in the seed and screenshots in this README. Redis joins once M06 needs it
 
