@@ -25,6 +25,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           <Link href="/applications" className="text-sm text-zinc-600 dark:text-zinc-400">
             Applications
           </Link>
+          <Link href="/analytics" className="text-sm text-zinc-600 dark:text-zinc-400">
+            Analytics
+          </Link>
           <form action={signOut} className="ml-auto">
             <button type="submit" className="text-sm text-zinc-600 dark:text-zinc-400">
               Sign out
