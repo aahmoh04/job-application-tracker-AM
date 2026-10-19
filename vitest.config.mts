@@ -50,6 +50,8 @@ export default defineConfig({
           fileParallelism: false,
           env: {
             DATABASE_URL: process.env.TEST_DATABASE_URL,
+            // The auth tests sign real session tokens.
+            JWT_SECRET: "test-secret-that-is-long-enough-for-hs256-abcdef",
           },
         },
       },
