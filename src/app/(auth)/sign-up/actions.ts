@@ -7,6 +7,8 @@ import { setSessionCookie } from "@/lib/auth/cookies";
 import { hashPassword } from "@/lib/auth/password";
 import { createSessionToken } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { SIGN_UPS_PER_ADDRESS, hit, retryMessage } from "@/lib/rate-limit";
+import { clientAddress } from "@/lib/request";
 import { signUpSchema } from "@/lib/validation/auth";
 
 export type SignUpState = {
@@ -15,6 +17,7 @@ export type SignUpState = {
     password?: string[];
     confirmPassword?: string[];
   };
+  message?: string;
   /** The email as typed, so a failed attempt does not empty the field. Never the passwords. */
   values?: { email: string };
 };
@@ -36,6 +39,15 @@ export async function signUp(_prevState: SignUpState, formData: FormData): Promi
   }
 
   const { email, password } = parsed.data;
+
+  // Counted once the input is valid, before the expensive hash and before
+  // anything is written. A taken address counts too, otherwise sign-up would
+  // let anyone test as fast as they like which addresses are registered.
+  const verdict = await hit(SIGN_UPS_PER_ADDRESS, await clientAddress());
+
+  if (!verdict.allowed) {
+    return { message: `Too many new accounts from here. ${retryMessage(verdict)}`, values };
+  }
 
   // Hash before touching the database, so a taken address does not answer
   // measurably faster. Right now that protects nothing, because the error

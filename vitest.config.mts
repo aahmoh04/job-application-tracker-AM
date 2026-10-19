@@ -8,6 +8,10 @@ import { defineConfig } from "vitest/config";
 process.env.TEST_DATABASE_URL ??=
   "postgresql://jobtracker:jobtracker@127.0.0.1:5432/jobtracker_test?schema=public";
 
+// The same for Redis. Database 15 belongs to the tests, development uses 0,
+// and src/test/redis.ts refuses to flush any other.
+process.env.TEST_REDIS_URL ??= "redis://127.0.0.1:6379/15";
+
 export default defineConfig({
   // Next understands "@/..." because tsconfig says so, but Vitest does not read
   // tsconfig paths. The pipeline test imports the generated Prisma enums, so the
@@ -33,8 +37,10 @@ export default defineConfig({
             // verifying agree.
             JWT_SECRET: "test-secret-that-is-long-enough-for-hs256-abcdef",
             // Unit tests never touch a database. With an empty URL,
-            // src/lib/db.ts throws on import if one ever tries.
+            // src/lib/db.ts throws on import if one ever tries, and the
+            // rate limits stay switched off.
             DATABASE_URL: "",
+            REDIS_URL: "",
           },
         },
       },
@@ -50,6 +56,7 @@ export default defineConfig({
           fileParallelism: false,
           env: {
             DATABASE_URL: process.env.TEST_DATABASE_URL,
+            REDIS_URL: process.env.TEST_REDIS_URL,
             // The auth tests sign real session tokens.
             JWT_SECRET: "test-secret-that-is-long-enough-for-hs256-abcdef",
           },

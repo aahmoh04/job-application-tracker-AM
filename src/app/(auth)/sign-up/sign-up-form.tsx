@@ -19,6 +19,15 @@ export function SignUpForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-5" noValidate>
+      {state.message && (
+        <p
+          className="rounded-md border border-red-600/30 bg-red-600/10 px-3 py-2 text-sm text-red-700 dark:text-red-400"
+          role="alert"
+        >
+          {state.message}
+        </p>
+      )}
+
       <div className="flex flex-col gap-1.5">
         <label htmlFor="email" className="text-sm font-medium">
           Email
