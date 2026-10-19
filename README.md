@@ -383,7 +383,7 @@ Tests sit next to the code they test, as `*.test.ts`. The ones that need a datab
 
 Shipping order, one milestone at a time. The numbers match the status table above.
 
-- **M00 Foundation.** Next.js with strict TypeScript, ESLint, Prettier, GitHub Actions running format check, lint, typecheck, unit tests, integration tests against a Postgres service container and the build on every push to main and every pull request
+- **M00 Foundation.** Next.js with strict TypeScript, ESLint, Prettier, GitHub Actions running format check, lint, typecheck, unit tests, integration tests against a Postgres service container and the build on every push to main and every pull request, plus Dependabot for weekly dependency updates
 - **M01 Data model.** Prisma schema, first migration, seed script, Docker Compose for Postgres and Redis
 - **M02 Credentials auth.** Registration, Argon2id hashing, JWT session in an httpOnly cookie, route guard in the proxy
 - **M03 OAuth.** GitHub sign-in, authorization code flow with PKCE, linking by verified email onto accounts that have no password

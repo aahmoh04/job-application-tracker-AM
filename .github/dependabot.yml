@@ -1,0 +1,20 @@
+# Dependabot opens a pull request when a dependency has a newer version, and
+# every one of those runs the same CI as any other change. Without this,
+# security fixes only surface when someone happens to run npm audit.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Minor and patch updates arrive together in one pull request a week,
+    # majors one by one, since those are the ones that can break things.
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
