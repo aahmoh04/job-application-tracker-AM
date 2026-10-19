@@ -22,16 +22,16 @@
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
-    "@node-rs/argon2": "^2.2.0",
-    "@prisma/adapter-pg": "^7.9.1",
-    "@prisma/client": "^7.9.1",
+    "@node-rs/argon2": "^2.2.2",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "@redis/client": "^6.3.0",
-    "jose": "^6.2.10",
-    "next": "16.3.8",
-    "pg": "^8.23.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "zod": "^4.5.4"
+    "jose": "^6.2.12",
+    "next": "16.4.2",
+    "pg": "^8.23.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -41,12 +41,12 @@
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
     "eslint": "^9",
-    "eslint-config-next": "16.3.8",
-    "prettier": "^3.9.6",
+    "eslint-config-next": "16.4.2",
+    "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",
-    "prisma": "^7.9.1",
+    "prisma": "^7.10.1",
     "tailwindcss": "^4",
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^4.1.11"
   }
