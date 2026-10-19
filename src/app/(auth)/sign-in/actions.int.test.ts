@@ -3,6 +3,8 @@ import { hashPassword } from "@/lib/auth/password";
 import { verifySessionToken } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { resetDatabase } from "@/test/database";
+import { resetRedis } from "@/test/redis";
+import { closeRedis } from "@/lib/redis";
 import { form, redirectTarget } from "@/test/next";
 import { signIn } from "./actions";
 
@@ -16,12 +18,20 @@ vi.mock("@/lib/auth/cookies", () => ({
   },
 }));
 
+// next/headers is not there either, so the visitor's address comes from here.
+const visitor = vi.hoisted(() => ({ address: "203.0.113.7" }));
+
+vi.mock("@/lib/request", () => ({
+  clientAddress: async () => visitor.address,
+}));
+
 const PASSWORD = "correct horse battery staple";
 let userId: string;
 
 beforeEach(async () => {
-  await resetDatabase();
+  await Promise.all([resetDatabase(), resetRedis()]);
   jar.token = null;
+  visitor.address = "203.0.113.7";
 
   const user = await prisma.user.create({
     data: { email: "me@example.com", passwordHash: await hashPassword(PASSWORD) },
@@ -30,7 +40,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  await prisma.$disconnect();
+  await Promise.all([prisma.$disconnect(), closeRedis()]);
 });
 
 describe("signIn", () => {
@@ -83,4 +93,56 @@ describe("signIn", () => {
     expect(result.message).toBe("Email or password is incorrect.");
     expect(jar.token).toBeNull();
   });
+});
+
+describe("signIn under the rate limits", () => {
+  const wrong = (email: string) => signIn({}, form({ email, password: "a wrong guess" }));
+
+  it("locks an account after five wrong passwords, even against the right one", async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await wrong("me@example.com");
+    }
+
+    const result = await signIn({}, form({ email: "me@example.com", password: PASSWORD }));
+
+    expect(result.message).toBe("Too many sign-in attempts. Try again in 15 minutes.");
+    expect(jar.token).toBeNull();
+  });
+
+  it("locks an unknown address the same way, so a lock reveals nothing", async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await wrong("nobody@example.com");
+    }
+
+    expect((await wrong("nobody@example.com")).message).toBe(
+      "Too many sign-in attempts. Try again in 15 minutes.",
+    );
+  });
+
+  it("forgets earlier failures once the right password comes in", async () => {
+    for (let round = 0; round < 2; round += 1) {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await wrong("me@example.com");
+      }
+
+      jar.token = null;
+      await redirectTarget(signIn({}, form({ email: "me@example.com", password: PASSWORD })));
+      expect(jar.token).not.toBeNull();
+    }
+  });
+
+  it("slows down one address that tries many accounts, and only that address", async () => {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await wrong(`guess${attempt}@example.com`);
+    }
+
+    const blocked = await signIn({}, form({ email: "me@example.com", password: PASSWORD }));
+    expect(blocked.message).toBe("Too many sign-in attempts. Try again in 15 minutes.");
+
+    visitor.address = "198.51.100.23";
+    const target = await redirectTarget(
+      signIn({}, form({ email: "me@example.com", password: PASSWORD })),
+    );
+    expect(target).toBe("/dashboard");
+  }, 20_000);
 });

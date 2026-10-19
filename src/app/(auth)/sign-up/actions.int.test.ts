@@ -2,6 +2,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { verifySessionToken } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { resetDatabase } from "@/test/database";
+import { resetRedis } from "@/test/redis";
+import { closeRedis } from "@/lib/redis";
 import { form, redirectTarget } from "@/test/next";
 import { signUp } from "./actions";
 
@@ -15,15 +17,23 @@ vi.mock("@/lib/auth/cookies", () => ({
   },
 }));
 
+// next/headers is not there either, so the visitor's address comes from here.
+const visitor = vi.hoisted(() => ({ address: "203.0.113.7" }));
+
+vi.mock("@/lib/request", () => ({
+  clientAddress: async () => visitor.address,
+}));
+
 const PASSWORD = "a long and boring passphrase";
 
 beforeEach(async () => {
-  await resetDatabase();
+  await Promise.all([resetDatabase(), resetRedis()]);
   jar.token = null;
+  visitor.address = "203.0.113.7";
 });
 
 afterAll(async () => {
-  await prisma.$disconnect();
+  await Promise.all([prisma.$disconnect(), closeRedis()]);
 });
 
 describe("signUp", () => {
@@ -71,5 +81,33 @@ describe("signUp", () => {
     expect(result.values).toEqual({ email: "person@example.com" });
     expect(await prisma.user.count()).toBe(0);
     expect(jar.token).toBeNull();
+  });
+});
+
+describe("signUp under the rate limit", () => {
+  it("allows five new accounts per address and hour, and stops the sixth before it writes", async () => {
+    for (let index = 0; index < 5; index += 1) {
+      await redirectTarget(
+        signUp(
+          {},
+          form({
+            email: `person${index}@example.com`,
+            password: PASSWORD,
+            confirmPassword: PASSWORD,
+          }),
+        ),
+      );
+    }
+
+    const result = await signUp(
+      {},
+      form({ email: "person5@example.com", password: PASSWORD, confirmPassword: PASSWORD }),
+    );
+
+    expect(result).toEqual({
+      message: "Too many new accounts from here. Try again in 60 minutes.",
+      values: { email: "person5@example.com" },
+    });
+    expect(await prisma.user.count()).toBe(5);
   });
 });

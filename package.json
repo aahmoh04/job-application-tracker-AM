@@ -25,6 +25,7 @@
     "@node-rs/argon2": "^2.2.0",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
+    "@redis/client": "^6.3.0",
     "jose": "^6.2.10",
     "next": "16.3.8",
     "pg": "^8.23.0",

@@ -37,7 +37,7 @@ This project is built in public, one milestone at a time. The checklist is the h
 | 03 | OAuth sign-in (GitHub) | [x] |
 | 04 | Application CRUD with validated forms | [x] |
 | 05 | Status pipeline and event history | [x] |
-| 06 | Redis rate limiting and caching | [ ] |
+| 06 | Redis rate limiting and caching | [~] |
 | 07 | Follow-up reminders via email | [ ] |
 | 08 | Analytics dashboard | [x] |
 | 09 | Role-based access control | [ ] |
@@ -106,12 +106,13 @@ Two ways in. Email and password with credentials hashed using Argon2id, and OAut
 
 The OAuth flow is written out rather than pulled from a library. It uses the authorization code flow with PKCE, a `state` cookie checked on the way back, the code exchanged server to server, and only email addresses that GitHub reports as **verified** are accepted. A GitHub sign-in is linked to an existing account with the same address only when that account has no password. Why is explained in the notes on the build. The code is written for GitHub only. A second provider would follow the same steps, but it needs its own module and routes, because the token exchange and the way to get a verified email differ per provider. One provider already shows the whole flow, which is why one is enough here.
 
+Sign-in and sign-up are rate limited in Redis, with a sliding window kept in a sorted set and updated by one Lua script. Five wrong passwords lock an account for fifteen minutes, counted for addresses that do not exist as well, so a lock reveals nothing. Twenty attempts from one network address within fifteen minutes stop that address. Sign-up allows five new accounts per address and hour, and a taken email counts too, so sign-up cannot be used to test addresses quickly either. Redis only ever sees SHA-256 digests of the emails and addresses it counts.
+
 Ownership is enforced server-side today. A user sees and edits only their own applications. Every read and every delete carries the user id in its `where` clause, and updates and status moves first load the row with that same scoped query and only write when it was found. Hiding a button in the UI is treated as cosmetics rather than as a security control.
 
 Planned on top of that.
 
 - **Roles (M09).** The `role` column exists and defaults to `USER`. An `ADMIN` operations view with aggregate platform metrics and no access to the content of anyone's applications is not built yet.
-- **Rate limiting (M06).** Login and registration endpoints limited per IP and per account through a Redis sliding-window counter.
 
 ---
 
@@ -126,8 +127,8 @@ Planned on top of that.
 | Auth | jose, Argon2id | Signed JWT sessions without a session table, and the password hash recommended by OWASP |
 | Validation | Zod | One schema parses every form payload on the server and infers the TypeScript type from the same definition. The forms show the field errors the server sends back |
 | UI | Tailwind CSS 4, dnd-kit | Styles sit next to the markup and Prettier sorts the classes, dnd-kit handles drag and drop on the board |
-| Testing | Vitest | Unit tests on the pure logic, and integration tests against a real Postgres for the analytics SQL, sign-up, sign-in, the GitHub callback and the ownership of every application, locally in Docker and in CI as a service container |
-| Cache & rate limiting | Redis 7 (planned, M06) | Sliding-window counters on auth endpoints and a TTL cache for dashboard aggregates. Both need fast expiring keys, which is exactly what Redis is for |
+| Testing | Vitest | Unit tests on the pure logic, and integration tests against a real Postgres and Redis for the analytics SQL, the rate limits, sign-up, sign-in, the GitHub callback and the ownership of every application, locally in Docker and in CI as service containers |
+| Cache & rate limiting | Redis 7 | Sliding-window rate limits on sign-in and sign-up today, a cache for the analytics next (M06). Both need fast keys that expire by themselves, which is exactly what Redis is for |
 | Email | Resend + React Email (planned, M07) | Transactional delivery with templates written as components instead of hand-glued HTML strings |
 
 End-to-end tests with Playwright are planned but not in the repo yet.
@@ -151,7 +152,7 @@ flowchart TB
 
     subgraph data["Data layer"]
         PG[("PostgreSQL<br/>via Prisma")]
-        RD[("Redis<br/>cache + rate limit<br/>planned, M06")]
+        RD[("Redis<br/>rate limits,<br/>cache planned")]
     end
 
     RES["Resend<br/>transactional email<br/>planned, M07"]
@@ -246,7 +247,7 @@ Two decisions worth calling out. `Company` is its own table rather than a string
 ### Prerequisites
 
 - Node.js 22 or newer
-- Docker, for the local PostgreSQL container. Compose starts Redis as well, the app uses it from M06
+- Docker, for the local PostgreSQL container. Compose starts Redis as well, which the rate limits use
 
 That is all. Running it locally needs no account anywhere, and GitHub sign-in is optional.
 
@@ -278,7 +279,7 @@ Then sign in as `demo@example.com` with the password `demo-password-123`. The de
 | `JWT_SECRET` | Signing secret for session tokens, at least 32 characters |
 | `NEXT_PUBLIC_APP_URL` | Public base URL, used for the OAuth callback. Email links will use it from M07 |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth credentials |
-| `REDIS_URL` | Redis connection string, not used before M06 |
+| `REDIS_URL` | Redis for the rate limits. Without it they switch themselves off |
 | `RESEND_API_KEY` | Transactional email delivery, not used before M07 |
 | `CRON_SECRET` | Shared secret protecting the reminder endpoint, not used before M07 |
 
@@ -296,7 +297,7 @@ For GitHub sign-in, create an OAuth app at github.com/settings/developers with t
 | `npm run typecheck` | Generates route types, then checks all types without emitting |
 | `npm run format:check` | Prettier check, the same one CI runs |
 | `npm run test` | Unit tests, Vitest, no database needed |
-| `npm run test:integration` | Integration tests against Postgres, needs the Docker container. Creates the `jobtracker_test` database on first use and refuses any database whose name does not end in `_test`, because every test empties it |
+| `npm run test:integration` | Integration tests against Postgres and Redis, needs the Docker containers. Creates the `jobtracker_test` database on first use and refuses any database whose name does not end in `_test`, and uses Redis database 15 only, because every test empties what it uses |
 | `npm run db:up` | Start the Postgres and Redis containers |
 | `npm run db:stop` | Stop them again |
 | `npm run db:migrate` | Create and apply a migration in development |
@@ -308,7 +309,8 @@ For GitHub sign-in, create an OAuth app at github.com/settings/developers with t
 There is no hosted instance, but nothing stops you from running one. It takes
 a PostgreSQL database, where the free plan at Neon is enough, a Vercel account
 on the free Hobby plan, and a second GitHub OAuth app if GitHub sign-in should
-work there too. Redis is not needed until the rate limiting in M06.
+work there too. Redis is optional. Without `REDIS_URL` the rate limits switch
+themselves off, so a deployment that wants them needs a managed Redis as well.
 
 1. Create the database in Frankfurt, `aws-eu-central-1` on Neon, which is where
    `vercel.json` runs the functions. Copy its direct connection string, not the
@@ -389,7 +391,7 @@ Shipping order, one milestone at a time. The numbers match the status table abov
 - **M03 OAuth.** GitHub sign-in, authorization code flow with PKCE, linking by verified email onto accounts that have no password
 - **M04 Applications.** Create, read, update, delete, Zod validation in the Server Actions, ownership enforced in the query itself rather than checked afterwards
 - **M05 Pipeline.** Transition rules as a typed state machine, StatusEvent history, Kanban board with drag and drop
-- **M06 Redis.** Sliding-window rate limiter on auth, cached dashboard aggregates with event-driven invalidation
+- **M06 Redis.** Sliding-window rate limits on sign-in and sign-up, done. Cached analytics with event-driven invalidation, next
 - **M07 Reminders.** Daily cron sweep, idempotent sending, React Email templates through Resend
 - **M08 Analytics.** Five questions answered in SQL, weekly volume, a funnel from the status history, answer rate and median response time by source, time in stage with `LAG`, quiet applications. Integration tests against Postgres, locally and in CI
 - **M09 RBAC.** Admin role, operations view, server-side enforcement on every mutation
@@ -411,6 +413,7 @@ Things worth writing down as I go, filled in milestone by milestone.
 - **Why ownership lives in the `where` clause and not in an `if`.** Every read takes a user id and puts it into the query, so an application belonging to someone else is never loaded rather than loaded and rejected. Deleting uses `deleteMany` with the same where clause. `delete` would accept the user id as well, but it throws when nothing matches, while `deleteMany` simply affects zero rows, so a foreign id gets exactly the same answer as a missing one
 - **Why M03 ships with one OAuth provider instead of two.** The plan said Google and GitHub. GitHub is done, and adding Google would have meant a second set of credentials on top of a flow that is already written and understood. The interesting part of OAuth is the flow itself, not repeating it, so the scope was cut on purpose rather than left half finished
 - **Why GitHub sign-in never links onto a password account.** GitHub confirms that an address is verified, sign-up here does not, because it sends no confirmation mail. A password account therefore proves nothing about who owns its address, and anyone could register a stranger's address first. Linking GitHub onto such an account by email would put the real owner into an account whose password someone else knows. So GitHub only links onto accounts without a password, which only GitHub sign-in creates, and everyone else signs in with their password. Removing the password while linking would not have helped, because sessions are signed JWTs without a session table, and a session that is already open stays valid until it expires. Confirming addresses at sign-up would make linking safe again, and the mail setup for that comes with M07
+- **Why the rate limits count addresses that do not exist, and let requests through when Redis is down.** A lock that only ever hit real accounts would tell an attacker which addresses are registered, the same leak the uniform error message avoids, so failed sign-ins count for any address. Being locked out of every login whenever Redis has a bad minute would be an outage of its own, so a missing or silent Redis lets the request through, and the cost of Argon2id still keeps each guess slow. The client never queues a command while it is disconnected and gives every command half a second, so a broken Redis cannot make a sign-in hang either
 - **How the security rules are tested.** The rules that keep data safe run as integration tests against Postgres. A stranger's application cannot be edited, deleted or moved, GitHub never links onto an account with a password, a wrong password and an unknown address get the same answer, and `next` cannot lead off the site. Each of these tests was checked by deleting the rule it guards and watching exactly that test fail. The race between two tabs needed more than that. Two requests in a test rarely overlap, because the second one is still opening its connection when the first has finished, so a test that simply fires both passes even without the guard. A third connection now locks the row, both requests read the same status and queue up behind the lock, and only then is it released. With the status in the `where` clause one write wins every time, without it both get through every time
 - **Why the pipeline lives in one module.** Every legal move is listed exactly once, in `src/lib/pipeline/transitions.ts`. The edit form, the status buttons on the detail page and the Kanban board all ask that module which moves to offer, and the Server Actions ask it again before anything is written, because a status posted by a browser is just a string until the server has checked it. The table is typed with `satisfies Record<Status, readonly Status[]>`, so adding a status to the Prisma enum without deciding where it may go breaks the build. Spreading the rules across the UI would have meant three places that can disagree, and the board would have been the first to drift
 
