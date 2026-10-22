@@ -1,8 +1,17 @@
-import { SignJWT } from "jose";
+import { SignJWT, decodeJwt } from "jose";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSessionToken, verifySessionToken } from "./session";
 
-const session = { userId: "user_abc123", role: "USER" };
+const session = { userId: "user_abc123" };
+
+/** A token signed with the test secret, for payloads the app itself never writes. */
+function signed(payload: Record<string, unknown>) {
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(new TextEncoder().encode(process.env.JWT_SECRET));
+}
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -12,6 +21,11 @@ describe("createSessionToken", () => {
   it("produces a token that verifies back to the same session", async () => {
     const token = await createSessionToken(session);
     await expect(verifySessionToken(token)).resolves.toEqual(session);
+  });
+
+  it("says who someone is and nothing about what they may do", async () => {
+    const token = await createSessionToken(session);
+    expect(decodeJwt(token)).not.toHaveProperty("role");
   });
 
   it("refuses to sign without a usable secret", async () => {
@@ -24,9 +38,7 @@ describe("verifySessionToken", () => {
   it("returns null for a tampered payload", async () => {
     const token = await createSessionToken(session);
     const [header, , signature] = token.split(".");
-    const forged = Buffer.from(JSON.stringify({ sub: "someone_else", role: "ADMIN" })).toString(
-      "base64url",
-    );
+    const forged = Buffer.from(JSON.stringify({ sub: "someone_else" })).toString("base64url");
 
     await expect(verifySessionToken(`${header}.${forged}.${signature}`)).resolves.toBeNull();
   });
@@ -40,7 +52,7 @@ describe("verifySessionToken", () => {
 
   it("returns null for an expired token", async () => {
     const secret = new TextEncoder().encode(process.env.JWT_SECRET);
-    const expired = await new SignJWT({ role: "USER" })
+    const expired = await new SignJWT({})
       .setProtectedHeader({ alg: "HS256" })
       .setSubject(session.userId)
       .setIssuedAt(Math.floor(Date.now() / 1000) - 3600)
@@ -55,15 +67,13 @@ describe("verifySessionToken", () => {
     await expect(verifySessionToken("")).resolves.toBeNull();
   });
 
-  it("returns null when the payload is missing the fields we rely on", async () => {
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
-    const withoutRole = await new SignJWT({})
-      .setProtectedHeader({ alg: "HS256" })
-      .setSubject(session.userId)
-      .setIssuedAt()
-      .setExpirationTime("1h")
-      .sign(secret);
+  it("returns null for a token that names nobody", async () => {
+    await expect(verifySessionToken(await signed({}))).resolves.toBeNull();
+  });
 
-    await expect(verifySessionToken(withoutRole)).resolves.toBeNull();
+  it("accepts a token from before the role moved out and ignores the role in it", async () => {
+    const old = await signed({ sub: session.userId, role: "ADMIN" });
+
+    await expect(verifySessionToken(old)).resolves.toEqual(session);
   });
 });

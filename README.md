@@ -40,7 +40,7 @@ This project is built in public, one milestone at a time. The checklist is the h
 | 06 | Redis rate limiting and caching | [x] |
 | 07 | Follow-up reminders via email | [ ] |
 | 08 | Analytics dashboard | [x] |
-| 09 | Role-based access control | [ ] |
+| 09 | Role-based access control | [~] |
 | 10 | Deployment setup and hardening | [x] |
 
 [ ] planned | [~] in progress | [x] done
@@ -108,11 +108,13 @@ The OAuth flow is written out rather than pulled from a library. It uses the aut
 
 Sign-in and sign-up are rate limited in Redis, with a sliding window kept in a sorted set and updated by one Lua script. Five wrong passwords lock an account for fifteen minutes, counted for addresses that do not exist as well, so a lock reveals nothing. Twenty attempts from one network address within fifteen minutes stop that address. Sign-up allows five new accounts per address and hour, and a taken email counts too, so sign-up cannot be used to test addresses quickly either. Redis only ever sees SHA-256 digests of the emails and addresses it counts.
 
+Who is making a request is decided in one place. The session token only proves an identity, and `requireUser()` loads the account from the database on every request. A deleted account is signed out at once, and a changed role takes effect with the next click instead of when the week-long token runs out. Every signed-in page and every Server Action goes through that guard, and a test finds every page by its file name, so a page added later without the guard fails CI.
+
 Ownership is enforced server-side today. A user sees and edits only their own applications. Every read and every delete carries the user id in its `where` clause, and updates and status moves first load the row with that same scoped query and only write when it was found. Hiding a button in the UI is treated as cosmetics rather than as a security control.
 
 Planned on top of that.
 
-- **Roles (M09).** The `role` column exists and defaults to `USER`. An `ADMIN` operations view with aggregate platform metrics and no access to the content of anyone's applications is not built yet.
+- **Roles (M09).** The `role` column exists and defaults to `USER`, and the guard already reads it fresh from the database on every request. An `ADMIN` operations view with aggregate platform metrics and no access to the content of anyone's applications is not built yet.
 
 ---
 
@@ -124,7 +126,7 @@ Planned on top of that.
 | Language | TypeScript, strict mode | The pipeline is a state machine. The transition table is typed against the status union, so a status added to the enum without rules breaks the build, and every move is checked at runtime because the status arrives from the browser |
 | Database | PostgreSQL 16 | Relational data with real foreign keys. Window functions and percentiles carry the analytics, `LAG` for the time in each stage and `percentile_cont` for the median response time |
 | ORM | Prisma 7 | Typed queries generated from the schema, and versioned migrations so the schema history is reviewable in git. Uses the `pg` driver adapter rather than a bundled engine |
-| Auth | jose, Argon2id | Signed JWT sessions without a session table, and the password hash recommended by OWASP |
+| Auth | jose, Argon2id | Signed JWT sessions without a session table, and the password hash recommended by OWASP. The token proves who someone is, the database decides what they may do |
 | Validation | Zod | One schema parses every form payload on the server and infers the TypeScript type from the same definition. The forms show the field errors the server sends back |
 | UI | Tailwind CSS 4, dnd-kit | Styles sit next to the markup and Prettier sorts the classes, dnd-kit handles drag and drop on the board |
 | Testing | Vitest | Unit tests on the pure logic, and integration tests against a real Postgres and Redis for the analytics SQL and its cache, the rate limits, sign-up, sign-in, the GitHub callback and the ownership of every application, locally in Docker and in CI as service containers |
@@ -173,7 +175,7 @@ flowchart TB
 
 Reads happen in Server Components and never reach the client as raw queries. Mutations on applications go through Server Actions, which are the single place where authorization, validation and the transition rules are enforced. The one write outside them is the GitHub callback, which creates or links the user. Route Handlers exist only for the cases that need a real HTTP endpoint. Today that is the GitHub OAuth start and callback, the cron trigger for reminders joins them in M07.
 
-The proxy (Next.js 16 renamed middleware to proxy) is only the first check. The layout for signed-in pages checks the session again, most pages check it once more themselves, and every Server Action that touches applications checks it before it writes anything. A guard that gets skipped in one place is still enforced in the next.
+The proxy (Next.js 16 renamed middleware to proxy) is only the first check. The layout for signed-in pages checks again, every page checks once more itself, and every Server Action that touches applications checks before it writes anything. All of them use the same guard, which also asks the database whether the account still exists. A guard that gets skipped in one place is still enforced in the next.
 
 ---
 
@@ -359,11 +361,13 @@ src/
       analytics/          five questions about the search, answered in SQL
       applications/       list, detail, create, edit
         board/            Kanban board with drag and drop
-    api/auth/github/      OAuth start, callback/ handles the way back
+    api/auth/
+      github/             OAuth start, callback/ handles the way back
+      session-ended/      clears the cookie of an account that no longer exists
   components/             status badge, delete button
   generated/prisma/       Prisma client, generated and gitignored
   lib/
-    auth/                 sessions, Argon2id hashing, cookies, redirects, GitHub OAuth
+    auth/                 the guard, sessions, Argon2id hashing, cookies, redirects, GitHub OAuth
     applications/         queries, Server Actions, the follow-up rule, ownership in every where clause
     analytics/            the SQL behind the analytics page, cached per user, with integration tests
     pipeline/             transition rules, the state machine
@@ -399,7 +403,7 @@ Shipping order, one milestone at a time. The numbers match the status table abov
 - **M06 Redis.** Sliding-window rate limits on sign-in and sign-up, and the analytics behind a per-user cache with versioned keys, invalidated by every write
 - **M07 Reminders.** Daily cron sweep, idempotent sending, React Email templates through Resend
 - **M08 Analytics.** Five questions answered in SQL, weekly volume, a funnel from the status history, answer rate and median response time by source, time in stage with `LAG`, quiet applications. Integration tests against Postgres, locally and in CI
-- **M09 RBAC.** Admin role, operations view, server-side enforcement on every mutation
+- **M09 RBAC.** One guard for every page and Server Action that reads the account fresh from the database, done. An admin operations view with platform numbers and no access to anyone's applications, next
 - **M10 Ship.** Everything a deployment needs, without running a public instance. Migrations inside the build, security headers, functions pinned next to the database, preview builds kept away from production, a demo account in the seed and screenshots in this README. Redis stays optional, without it the rate limits and the cache step aside
 
 ### Later, if the core holds up
@@ -421,6 +425,7 @@ Things worth writing down as I go, filled in milestone by milestone.
 - **Why the rate limits count addresses that do not exist, and let requests through when Redis is down.** A lock that only ever hit real accounts would tell an attacker which addresses are registered, the same leak the uniform error message avoids, so failed sign-ins count for any address. Being locked out of every login whenever Redis has a bad minute would be an outage of its own, so a missing or silent Redis lets the request through, and the cost of Argon2id still keeps each guess slow. The client never queues a command while it is disconnected and gives every command half a second, so a broken Redis cannot make a sign-in hang either
 - **What changed when the analytics moved behind a cache.** Less than the word suggests, and that is the honest part. With a few dozen applications the five queries take milliseconds, so nobody would notice the cache. It is here to build the pattern once, and its hard part is invalidation, not storage. Every user has a version number in Redis, and each cached answer carries the version it was computed under in its key. A write bumps the version once it has committed, which makes every older answer unreachable at once. Deleting the entry instead would leave a gap. A page view that read the old data just before the write could store its result right after the delete, and the old numbers would be back until they expire. With versions that late result lands under the old number, where nobody looks. Bumping before the commit would open the same gap from the other side. Both moments are held open in tests, and each test fails as soon as its rule is taken out. The plan said to invalidate when a `StatusEvent` is written, but the source, the date sent and the role feed the numbers too, so every save and every deletion invalidates. Entries still expire after five minutes, because two answers depend on the clock and because an invalidation lost to a Redis hiccup should not leave wrong numbers behind for long. Without Redis the page reads straight from Postgres
 - **How the security rules are tested.** The rules that keep data safe run as integration tests against Postgres. A stranger's application cannot be edited, deleted or moved, GitHub never links onto an account with a password, a wrong password and an unknown address get the same answer, and `next` cannot lead off the site. Each of these tests was checked by deleting the rule it guards and watching exactly that test fail. The race between two tabs needed more than that. Two requests in a test rarely overlap, because the second one is still opening its connection when the first has finished, so a test that simply fires both passes even without the guard. A third connection now locks the row, both requests read the same status and queue up behind the lock, and only then is it released. With the status in the `where` clause one write wins every time, without it both get through every time
+- **Why the token carries no role, and what happens to a deleted account.** The session is a signed JWT that stays valid for a week, and whatever is written into it stays true for that week. A role in the token would let a demoted admin keep the role until it runs out. So the token only says who someone is, and `requireUser()` in `src/lib/auth/guard.ts` reads the account and its role from the database on every request. That is one lookup by primary key, and React's `cache()` lets the layout, the page and `generateMetadata` share it. The same lookup notices a deleted account, which used to end in a loop. The dashboard sent a session without an account to the sign-in page, and the proxy, which only checks the signature, sent the still valid token straight back to the dashboard. Pages cannot change cookies, so the guard now sends such a session to a small Route Handler that clears the cookie, and only when the account is really gone, so a link to it cannot sign anyone out. Tests cover every action and every page, the pages found by file name, and each test fails as soon as its guard is replaced by a check of the token alone
 - **Why the pipeline lives in one module.** Every legal move is listed exactly once, in `src/lib/pipeline/transitions.ts`. The edit form, the status buttons on the detail page and the Kanban board all ask that module which moves to offer, and the Server Actions ask it again before anything is written, because a status posted by a browser is just a string until the server has checked it. The table is typed with `satisfies Record<Status, readonly Status[]>`, so adding a status to the Prisma enum without deciding where it may go breaks the build. Spreading the rules across the UI would have meant three places that can disagree, and the board would have been the first to drift
 
 Still to write, once the milestone lands.

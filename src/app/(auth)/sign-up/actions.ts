@@ -68,7 +68,7 @@ export async function signUp(_prevState: SignUpState, formData: FormData): Promi
     throw error;
   }
 
-  const token = await createSessionToken({ userId: user.id, role: user.role });
+  const token = await createSessionToken({ userId: user.id });
   await setSessionCookie(token);
 
   // Outside the try/catch above. redirect() works by throwing a special error

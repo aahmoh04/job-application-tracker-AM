@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { isFollowUpDue } from "@/lib/applications/follow-up";
 import { listApplications } from "@/lib/applications/queries";
-import { getSession } from "@/lib/auth/cookies";
+import { requireUser } from "@/lib/auth/guard";
 import { dateFormat } from "@/lib/format";
 
 export const metadata: Metadata = {
@@ -12,14 +11,10 @@ export const metadata: Metadata = {
 };
 
 export default async function ApplicationsPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/sign-in");
-  }
+  const user = await requireUser();
 
   // The user id goes into the query, not into a check afterwards.
-  const applications = await listApplications(session.userId);
+  const applications = await listApplications(user.id);
   const now = new Date();
 
   return (

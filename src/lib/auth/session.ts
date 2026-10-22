@@ -5,6 +5,11 @@ import { SignJWT, jwtVerify } from "jose";
  * is what keeps it usable from the middleware. Middleware runs in Next's Edge
  * runtime, where `next/headers` and native modules are unavailable, so `jose`
  * on top of Web Crypto is the one option that works on both sides.
+ *
+ * The token says who someone is and nothing about what they may do. A role
+ * written into it would stay there for the week the token is valid, so an
+ * admin who loses the role would keep it until then. The role is read from
+ * the database on every request instead, see src/lib/auth/guard.ts.
  */
 
 export const SESSION_COOKIE_NAME = "session";
@@ -12,7 +17,6 @@ export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // one week
 
 export type SessionPayload = {
   userId: string;
-  role: string;
 };
 
 function getSecretKey(): Uint8Array {
@@ -29,7 +33,7 @@ function getSecretKey(): Uint8Array {
 }
 
 export async function createSessionToken(session: SessionPayload): Promise<string> {
-  return new SignJWT({ role: session.role })
+  return new SignJWT({})
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(session.userId)
     .setIssuedAt()
@@ -46,11 +50,13 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   try {
     const { payload } = await jwtVerify(token, getSecretKey(), { algorithms: ["HS256"] });
 
-    if (typeof payload.sub !== "string" || typeof payload.role !== "string") {
+    if (typeof payload.sub !== "string") {
       return null;
     }
 
-    return { userId: payload.sub, role: payload.role };
+    // Tokens from before the role moved out still carry one. Like everything
+    // else in the payload besides the subject, it is ignored.
+    return { userId: payload.sub };
   } catch {
     return null;
   }

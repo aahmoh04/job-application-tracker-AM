@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { Status } from "@/generated/prisma/enums";
-import { getSession } from "@/lib/auth/cookies";
+import { requireUser } from "@/lib/auth/guard";
 import { invalidateCache } from "@/lib/cache";
 import { prisma } from "@/lib/db";
 import { canTransition } from "@/lib/pipeline/transitions";
@@ -27,18 +27,13 @@ export type ApplicationFormState = {
 };
 
 /**
- * Every action checks the session itself. The proxy keeps anonymous visitors
- * off the pages, and the layout checks again, but a Server Action is its own
- * endpoint and can be called without ever loading a page.
+ * Every action checks who is calling by itself. The proxy keeps anonymous
+ * visitors off the pages, and the layout checks again, but a Server Action is
+ * its own endpoint and can be called without ever loading a page.
  */
 async function requireUserId(): Promise<string> {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/sign-in");
-  }
-
-  return session.userId;
+  const user = await requireUser();
+  return user.id;
 }
 
 /**

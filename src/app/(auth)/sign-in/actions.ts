@@ -87,7 +87,7 @@ export async function signIn(_prevState: SignInState, formData: FormData): Promi
   // The right password ends the streak of failures for this account.
   await clear(SIGN_IN_FAILURES_PER_ACCOUNT, email);
 
-  const token = await createSessionToken({ userId: user.id, role: user.role });
+  const token = await createSessionToken({ userId: user.id });
   await setSessionCookie(token);
 
   // Outside any try/catch. redirect() works by throwing a special error that

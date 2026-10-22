@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
     return failure(request, "oauth_account_exists");
   }
 
-  const sessionToken = await createSessionToken({ userId: user.id, role: user.role });
+  const sessionToken = await createSessionToken({ userId: user.id });
   await setSessionCookie(sessionToken);
 
   // Set by the start route, but checked again, it came back from the browser.
@@ -96,7 +96,7 @@ async function linkOrCreateUser(providerAccountId: string, email: string) {
     where: {
       provider_providerAccountId: { provider: PROVIDER, providerAccountId },
     },
-    select: { user: { select: { id: true, role: true } } },
+    select: { user: { select: { id: true } } },
   });
 
   if (existingAccount) {
@@ -105,7 +105,7 @@ async function linkOrCreateUser(providerAccountId: string, email: string) {
 
   const existingUser = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, role: true, passwordHash: true },
+    select: { id: true, passwordHash: true },
   });
 
   if (existingUser) {
@@ -117,7 +117,7 @@ async function linkOrCreateUser(providerAccountId: string, email: string) {
       data: { userId: existingUser.id, provider: PROVIDER, providerAccountId },
     });
 
-    return { id: existingUser.id, role: existingUser.role };
+    return { id: existingUser.id };
   }
 
   return prisma.user.create({
@@ -130,6 +130,6 @@ async function linkOrCreateUser(providerAccountId: string, email: string) {
         create: { provider: PROVIDER, providerAccountId },
       },
     },
-    select: { id: true, role: true },
+    select: { id: true },
   });
 }
