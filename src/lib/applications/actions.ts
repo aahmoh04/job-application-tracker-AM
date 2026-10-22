@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { Status } from "@/generated/prisma/enums";
 import { getSession } from "@/lib/auth/cookies";
+import { invalidateCache } from "@/lib/cache";
 import { prisma } from "@/lib/db";
 import { canTransition } from "@/lib/pipeline/transitions";
 import {
@@ -93,6 +94,12 @@ export async function createApplication(
     select: { id: true },
   });
 
+  // The analytics count this application from now on. Invalidated after the
+  // write and not before, otherwise a page view at the same moment could still
+  // read the old data and cache it as current. The same holds for every write
+  // below.
+  await invalidateCache(userId);
+
   revalidatePath("/applications");
   redirect(`/applications/${application.id}`);
 }
@@ -178,6 +185,10 @@ export async function updateApplication(
     };
   }
 
+  // On every save, not only on a status change. The source, the date sent and
+  // the role feed the analytics as well.
+  await invalidateCache(userId);
+
   revalidatePath("/applications");
   revalidatePath(`/applications/${existing.id}`);
   redirect(`/applications/${existing.id}`);
@@ -197,7 +208,11 @@ export async function deleteApplication(id: string): Promise<void> {
   // but `delete` throws when nothing matches, while `deleteMany` simply affects
   // zero rows. A foreign id and a missing one end the same way, without a
   // try/catch around it that someone could get wrong.
-  await prisma.application.deleteMany({ where: { id: applicationId, userId } });
+  const { count } = await prisma.application.deleteMany({ where: { id: applicationId, userId } });
+
+  if (count > 0) {
+    await invalidateCache(userId);
+  }
 
   revalidatePath("/applications");
   redirect("/applications");
@@ -269,6 +284,8 @@ async function transitionApplication(
   if (!moved) {
     return { ok: false, reason: "not-allowed", id: existing.id };
   }
+
+  await invalidateCache(userId);
 
   return { ok: true, id: existing.id };
 }

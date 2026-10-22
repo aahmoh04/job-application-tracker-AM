@@ -37,7 +37,7 @@ This project is built in public, one milestone at a time. The checklist is the h
 | 03 | OAuth sign-in (GitHub) | [x] |
 | 04 | Application CRUD with validated forms | [x] |
 | 05 | Status pipeline and event history | [x] |
-| 06 | Redis rate limiting and caching | [~] |
+| 06 | Redis rate limiting and caching | [x] |
 | 07 | Follow-up reminders via email | [ ] |
 | 08 | Analytics dashboard | [x] |
 | 09 | Role-based access control | [ ] |
@@ -98,7 +98,7 @@ Emails will be transactional templates rendered with React Email and delivered t
 
 ![The analytics page with the weekly chart, the funnel, answers by source, days per stage and the quiet applications](docs/screenshots/analytics.png)
 
-All five are computed in Postgres with `$queryRaw`, because window functions, percentiles and `FILTER` are beyond Prisma's query API, and every value still goes in as a parameter. Integration tests run them against a real Postgres, see [Getting started](#getting-started). They are the heaviest read path in the app, so caching them in Redis is planned with M06, invalidated whenever a `StatusEvent` is written for that user.
+All five are computed in Postgres with `$queryRaw`, because window functions, percentiles and `FILTER` are beyond Prisma's query API, and every value still goes in as a parameter. Integration tests run them against a real Postgres, see [Getting started](#getting-started). They are the heaviest read path in the app, so the page reads them through a per-user cache in Redis. Every write to an application invalidates it, an edited source or a deletion as much as a status move, and entries expire after five minutes, because two of the answers depend on the clock. Why the cache works with versioned keys instead of deleting entries is in the notes on the build.
 
 ### Accounts and access
 
@@ -127,8 +127,8 @@ Planned on top of that.
 | Auth | jose, Argon2id | Signed JWT sessions without a session table, and the password hash recommended by OWASP |
 | Validation | Zod | One schema parses every form payload on the server and infers the TypeScript type from the same definition. The forms show the field errors the server sends back |
 | UI | Tailwind CSS 4, dnd-kit | Styles sit next to the markup and Prettier sorts the classes, dnd-kit handles drag and drop on the board |
-| Testing | Vitest | Unit tests on the pure logic, and integration tests against a real Postgres and Redis for the analytics SQL, the rate limits, sign-up, sign-in, the GitHub callback and the ownership of every application, locally in Docker and in CI as service containers |
-| Cache & rate limiting | Redis 7 | Sliding-window rate limits on sign-in and sign-up today, a cache for the analytics next (M06). Both need fast keys that expire by themselves, which is exactly what Redis is for |
+| Testing | Vitest | Unit tests on the pure logic, and integration tests against a real Postgres and Redis for the analytics SQL and its cache, the rate limits, sign-up, sign-in, the GitHub callback and the ownership of every application, locally in Docker and in CI as service containers |
+| Cache & rate limiting | Redis 7 | Sliding-window rate limits on sign-in and sign-up, and a per-user cache for the analytics with versioned keys. Both need fast keys that expire by themselves, which is exactly what Redis is for |
 | Email | Resend + React Email (planned, M07) | Transactional delivery with templates written as components instead of hand-glued HTML strings |
 
 End-to-end tests with Playwright are planned but not in the repo yet.
@@ -152,7 +152,7 @@ flowchart TB
 
     subgraph data["Data layer"]
         PG[("PostgreSQL<br/>via Prisma")]
-        RD[("Redis<br/>rate limits,<br/>cache planned")]
+        RD[("Redis<br/>rate limits,<br/>analytics cache")]
     end
 
     RES["Resend<br/>transactional email<br/>planned, M07"]
@@ -165,8 +165,8 @@ flowchart TB
     RSC --> PG
     SA --> PG
     API --> PG
-    RSC -.-> RD
-    SA -.-> RD
+    RSC --> RD
+    SA --> RD
     CRON -.-> API
     API -.-> RES
 ```
@@ -247,7 +247,7 @@ Two decisions worth calling out. `Company` is its own table rather than a string
 ### Prerequisites
 
 - Node.js 22 or newer
-- Docker, for the local PostgreSQL container. Compose starts Redis as well, which the rate limits use
+- Docker, for the local PostgreSQL container. Compose starts Redis as well, which the rate limits and the analytics cache use
 
 That is all. Running it locally needs no account anywhere, and GitHub sign-in is optional.
 
@@ -279,7 +279,7 @@ Then sign in as `demo@example.com` with the password `demo-password-123`. The de
 | `JWT_SECRET` | Signing secret for session tokens, at least 32 characters |
 | `NEXT_PUBLIC_APP_URL` | Public base URL, used for the OAuth callback. Email links will use it from M07 |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth credentials |
-| `REDIS_URL` | Redis for the rate limits. Without it they switch themselves off |
+| `REDIS_URL` | Redis for the rate limits and the analytics cache. Without it the limits switch themselves off and the analytics are read straight from Postgres |
 | `RESEND_API_KEY` | Transactional email delivery, not used before M07 |
 | `CRON_SECRET` | Shared secret protecting the reminder endpoint, not used before M07 |
 
@@ -310,7 +310,8 @@ There is no hosted instance, but nothing stops you from running one. It takes
 a PostgreSQL database, where the free plan at Neon is enough, a Vercel account
 on the free Hobby plan, and a second GitHub OAuth app if GitHub sign-in should
 work there too. Redis is optional. Without `REDIS_URL` the rate limits switch
-themselves off, so a deployment that wants them needs a managed Redis as well.
+themselves off and the analytics skip the cache, so a deployment that wants
+both needs a managed Redis as well.
 
 1. Create the database in Frankfurt, `aws-eu-central-1` on Neon, which is where
    `vercel.json` runs the functions. Copy its direct connection string, not the
@@ -364,12 +365,16 @@ src/
   lib/
     auth/                 sessions, Argon2id hashing, cookies, redirects, GitHub OAuth
     applications/         queries, Server Actions, the follow-up rule, ownership in every where clause
-    analytics/            the SQL behind the analytics page, with its integration tests
+    analytics/            the SQL behind the analytics page, cached per user, with integration tests
     pipeline/             transition rules, the state machine
     validation/           Zod schemas, parsed in the Server Actions
+    cache.ts              per-user cache in Redis with versioned keys
     db.ts                 Prisma client singleton
     format.ts             date formats with an explicit time zone
-  test/                   database helpers and the global setup for the integration tests
+    rate-limit.ts         sliding-window limits for sign-in and sign-up
+    redis.ts              one Redis connection per process
+    request.ts            the client address the rate limits count
+  test/                   database and Redis helpers, and the global setup for the integration tests
   proxy.ts                route guard, the Next.js 16 name for middleware
 prisma/
   schema.prisma
@@ -385,17 +390,17 @@ Tests sit next to the code they test, as `*.test.ts`. The ones that need a datab
 
 Shipping order, one milestone at a time. The numbers match the status table above.
 
-- **M00 Foundation.** Next.js with strict TypeScript, ESLint, Prettier, GitHub Actions running format check, lint, typecheck, unit tests, integration tests against a Postgres service container and the build on every push to main and every pull request, plus Dependabot for weekly dependency updates
+- **M00 Foundation.** Next.js with strict TypeScript, ESLint, Prettier, GitHub Actions running format check, lint, typecheck, unit tests, integration tests against Postgres and Redis service containers and the build on every push to main and every pull request, plus Dependabot for weekly dependency updates
 - **M01 Data model.** Prisma schema, first migration, seed script, Docker Compose for Postgres and Redis
 - **M02 Credentials auth.** Registration, Argon2id hashing, JWT session in an httpOnly cookie, route guard in the proxy
 - **M03 OAuth.** GitHub sign-in, authorization code flow with PKCE, linking by verified email onto accounts that have no password
 - **M04 Applications.** Create, read, update, delete, Zod validation in the Server Actions, ownership enforced in the query itself rather than checked afterwards
 - **M05 Pipeline.** Transition rules as a typed state machine, StatusEvent history, Kanban board with drag and drop
-- **M06 Redis.** Sliding-window rate limits on sign-in and sign-up, done. Cached analytics with event-driven invalidation, next
+- **M06 Redis.** Sliding-window rate limits on sign-in and sign-up, and the analytics behind a per-user cache with versioned keys, invalidated by every write
 - **M07 Reminders.** Daily cron sweep, idempotent sending, React Email templates through Resend
 - **M08 Analytics.** Five questions answered in SQL, weekly volume, a funnel from the status history, answer rate and median response time by source, time in stage with `LAG`, quiet applications. Integration tests against Postgres, locally and in CI
 - **M09 RBAC.** Admin role, operations view, server-side enforcement on every mutation
-- **M10 Ship.** Everything a deployment needs, without running a public instance. Migrations inside the build, security headers, functions pinned next to the database, preview builds kept away from production, a demo account in the seed and screenshots in this README. Redis joins once M06 needs it
+- **M10 Ship.** Everything a deployment needs, without running a public instance. Migrations inside the build, security headers, functions pinned next to the database, preview builds kept away from production, a demo account in the seed and screenshots in this README. Redis stays optional, without it the rate limits and the cache step aside
 
 ### Later, if the core holds up
 
@@ -414,12 +419,12 @@ Things worth writing down as I go, filled in milestone by milestone.
 - **Why M03 ships with one OAuth provider instead of two.** The plan said Google and GitHub. GitHub is done, and adding Google would have meant a second set of credentials on top of a flow that is already written and understood. The interesting part of OAuth is the flow itself, not repeating it, so the scope was cut on purpose rather than left half finished
 - **Why GitHub sign-in never links onto a password account.** GitHub confirms that an address is verified, sign-up here does not, because it sends no confirmation mail. A password account therefore proves nothing about who owns its address, and anyone could register a stranger's address first. Linking GitHub onto such an account by email would put the real owner into an account whose password someone else knows. So GitHub only links onto accounts without a password, which only GitHub sign-in creates, and everyone else signs in with their password. Removing the password while linking would not have helped, because sessions are signed JWTs without a session table, and a session that is already open stays valid until it expires. Confirming addresses at sign-up would make linking safe again, and the mail setup for that comes with M07
 - **Why the rate limits count addresses that do not exist, and let requests through when Redis is down.** A lock that only ever hit real accounts would tell an attacker which addresses are registered, the same leak the uniform error message avoids, so failed sign-ins count for any address. Being locked out of every login whenever Redis has a bad minute would be an outage of its own, so a missing or silent Redis lets the request through, and the cost of Argon2id still keeps each guess slow. The client never queues a command while it is disconnected and gives every command half a second, so a broken Redis cannot make a sign-in hang either
+- **What changed when the analytics moved behind a cache.** Less than the word suggests, and that is the honest part. With a few dozen applications the five queries take milliseconds, so nobody would notice the cache. It is here to build the pattern once, and its hard part is invalidation, not storage. Every user has a version number in Redis, and each cached answer carries the version it was computed under in its key. A write bumps the version once it has committed, which makes every older answer unreachable at once. Deleting the entry instead would leave a gap. A page view that read the old data just before the write could store its result right after the delete, and the old numbers would be back until they expire. With versions that late result lands under the old number, where nobody looks. Bumping before the commit would open the same gap from the other side. Both moments are held open in tests, and each test fails as soon as its rule is taken out. The plan said to invalidate when a `StatusEvent` is written, but the source, the date sent and the role feed the numbers too, so every save and every deletion invalidates. Entries still expire after five minutes, because two answers depend on the clock and because an invalidation lost to a Redis hiccup should not leave wrong numbers behind for long. Without Redis the page reads straight from Postgres
 - **How the security rules are tested.** The rules that keep data safe run as integration tests against Postgres. A stranger's application cannot be edited, deleted or moved, GitHub never links onto an account with a password, a wrong password and an unknown address get the same answer, and `next` cannot lead off the site. Each of these tests was checked by deleting the rule it guards and watching exactly that test fail. The race between two tabs needed more than that. Two requests in a test rarely overlap, because the second one is still opening its connection when the first has finished, so a test that simply fires both passes even without the guard. A third connection now locks the row, both requests read the same status and queue up behind the lock, and only then is it released. With the status in the `where` clause one write wins every time, without it both get through every time
 - **Why the pipeline lives in one module.** Every legal move is listed exactly once, in `src/lib/pipeline/transitions.ts`. The edit form, the status buttons on the detail page and the Kanban board all ask that module which moves to offer, and the Server Actions ask it again before anything is written, because a status posted by a browser is just a string until the server has checked it. The table is typed with `satisfies Record<Status, readonly Status[]>`, so adding a status to the Prisma enum without deciding where it may go breaks the build. Spreading the rules across the UI would have meant three places that can disagree, and the board would have been the first to drift
 
 Still to write, once the milestone lands.
 
-- What actually changed when the dashboard queries moved behind a cache (M06)
 - How `reminderSentAt` keeps a retried reminder job from sending the same email twice (M07)
 
 ---

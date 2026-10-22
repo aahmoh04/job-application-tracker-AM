@@ -1,9 +1,12 @@
 import { Client } from "pg";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { getAnalytics } from "@/lib/analytics/cached";
 import type { SessionPayload } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { closeRedis } from "@/lib/redis";
 import { createApplication, createUser, resetDatabase } from "@/test/database";
 import { form, redirectTarget } from "@/test/next";
+import { resetRedis } from "@/test/redis";
 import {
   createApplication as createApplicationAction,
   deleteApplication,
@@ -13,7 +16,7 @@ import {
 
 // Stand-ins for the parts that need a running Next request. The signed-in
 // user comes from here, and revalidatePath has no cache to clear. The rules,
-// the queries and the database are real.
+// the queries, the database and the Redis cache are real.
 const request = vi.hoisted(() => ({ session: null as SessionPayload | null }));
 
 vi.mock("@/lib/auth/cookies", () => ({
@@ -58,15 +61,28 @@ async function waitUntil(condition: () => Promise<boolean>) {
   }
 }
 
+/** Waits until at least this many queries are queued behind a lock. */
+async function waitForLockWaiters(blocker: Client, count: number) {
+  // Inside a transaction Postgres freezes pg_stat_activity at the first look,
+  // so the snapshot has to be cleared before every check.
+  await waitUntil(async () => {
+    await blocker.query("SELECT pg_stat_clear_snapshot()");
+    const { rows } = await blocker.query(
+      "SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'",
+    );
+    return rows[0].waiting >= count;
+  });
+}
+
 beforeEach(async () => {
-  await resetDatabase();
+  await Promise.all([resetDatabase(), resetRedis()]);
   me = (await createUser("me@example.com")).id;
   stranger = (await createUser("stranger@example.com")).id;
   request.session = { userId: me, role: "USER" };
 });
 
 afterAll(async () => {
-  await prisma.$disconnect();
+  await Promise.all([prisma.$disconnect(), closeRedis()]);
 });
 
 describe("creating", () => {
@@ -202,16 +218,8 @@ describe("moving my own application", () => {
       moveApplication(mine, "WITHDRAWN"),
     ]);
 
-    // Two writes waiting for the lock means both reads are done. Inside a
-    // transaction Postgres freezes pg_stat_activity at the first look, so the
-    // snapshot has to be cleared before every check.
-    await waitUntil(async () => {
-      await blocker.query("SELECT pg_stat_clear_snapshot()");
-      const { rows } = await blocker.query(
-        "SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'",
-      );
-      return rows[0].waiting >= 2;
-    });
+    // Two writes waiting for the lock means both reads are done.
+    await waitForLockWaiters(blocker, 2);
 
     await blocker.query("COMMIT");
     await blocker.end();
@@ -227,5 +235,84 @@ describe("moving my own application", () => {
     expect(results.filter((result) => result.ok)).toHaveLength(1);
     expect(application.statusEvents).toHaveLength(2);
     expect(["REJECTED", "WITHDRAWN"]).toContain(application.status);
+  });
+});
+
+describe("the cached analytics", () => {
+  // Each test reads the analytics once before the write, which fills the
+  // cache. The read after the write only sees the change if the action
+  // invalidated the cache.
+  async function analytics() {
+    return getAnalytics(me, new Date());
+  }
+
+  it("count a new application right away", async () => {
+    expect((await analytics()).funnel.applied).toBe(0);
+
+    await redirectTarget(createApplicationAction({}, applicationForm({ status: "APPLIED" })));
+
+    expect((await analytics()).funnel.applied).toBe(1);
+  });
+
+  describe("with an application", () => {
+    let mine: string;
+
+    beforeEach(async () => {
+      mine = (
+        await createApplication(me, {
+          status: "APPLIED",
+          source: "JOB_BOARD",
+          events: [{ to: "APPLIED", at: new Date(Date.now() - DAY) }],
+        })
+      ).id;
+    });
+
+    it("follow an edit that only changes the source", async () => {
+      expect((await analytics()).sources.map((row) => row.source)).toEqual(["JOB_BOARD"]);
+
+      await redirectTarget(
+        updateApplication(mine, {}, applicationForm({ status: "APPLIED", source: "REFERRAL" })),
+      );
+
+      expect((await analytics()).sources.map((row) => row.source)).toEqual(["REFERRAL"]);
+    });
+
+    it("follow a move on the board", async () => {
+      expect((await analytics()).funnel.screening).toBe(0);
+
+      expect(await moveApplication(mine, "SCREENING")).toEqual({ ok: true });
+
+      expect((await analytics()).funnel.screening).toBe(1);
+    });
+
+    it("never keep the numbers from before a move that was still being written", async () => {
+      // The lock from the race test above holds the move after its read, with
+      // its write waiting. A page view runs in exactly that moment and caches
+      // what it sees, the old state. Had the move invalidated before writing,
+      // that old state would now sit under the new version.
+      const blocker = new Client({ connectionString: process.env.DATABASE_URL });
+      await blocker.connect();
+      await blocker.query("BEGIN");
+      await blocker.query('SELECT id FROM "Application" WHERE id = $1 FOR UPDATE', [mine]);
+
+      const move = moveApplication(mine, "SCREENING");
+      await waitForLockWaiters(blocker, 1);
+
+      expect((await analytics()).funnel.screening).toBe(0);
+
+      await blocker.query("COMMIT");
+      await blocker.end();
+
+      expect(await move).toEqual({ ok: true });
+      expect((await analytics()).funnel.screening).toBe(1);
+    });
+
+    it("drop a deleted application", async () => {
+      expect((await analytics()).funnel.applied).toBe(1);
+
+      await redirectTarget(deleteApplication(mine));
+
+      expect((await analytics()).funnel.applied).toBe(0);
+    });
   });
 });
