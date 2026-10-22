@@ -52,7 +52,7 @@ describe("signUp", () => {
     expect(target).toBe("/dashboard");
     expect(user.passwordHash).toMatch(/^\$argon2id\$/);
     expect(user.passwordHash).not.toContain(PASSWORD);
-    expect(await verifySessionToken(jar.token ?? "")).toEqual({ userId: user.id, role: "USER" });
+    expect(await verifySessionToken(jar.token ?? "")).toEqual({ userId: user.id });
   });
 
   it("refuses a taken address, whatever its spelling, and keeps what was typed", async () => {

@@ -22,6 +22,7 @@ The block above is maintained by `next dev`. Everything below is about this proj
 ## Rules the code relies on
 
 - Every read and write of an application carries the user id in its `where` clause. There is no function that loads an application without it, keep it that way.
+- Pages and Server Actions get the signed-in user from `requireUser()` in `src/lib/auth/guard.ts`, never from `getSession()` directly. The token only proves who someone is. Whether the account still exists and what it may do comes from the database. `src/app/(app)/pages.int.test.ts` fails for any page under `(app)` that skips the guard.
 - A write that depends on a status puts that status into its `where` clause as well, so two requests cannot both pass a check against the same old state.
 - Every Server Action that writes an application calls `invalidateCache(userId)` from `src/lib/cache.ts` once the write has committed, never before. The analytics are read through that cache, and a write that skips it leaves the page showing old numbers for up to five minutes.
 - Legal status moves live only in `src/lib/pipeline/transitions.ts`. The UI asks it what to offer, and the Server Actions ask it again before they write.

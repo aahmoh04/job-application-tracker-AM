@@ -53,7 +53,7 @@ describe("signIn", () => {
     );
 
     expect(target).toBe("/applications/board");
-    expect(await verifySessionToken(jar.token ?? "")).toEqual({ userId, role: "USER" });
+    expect(await verifySessionToken(jar.token ?? "")).toEqual({ userId });
   });
 
   it("goes to the dashboard when next points somewhere else", async () => {

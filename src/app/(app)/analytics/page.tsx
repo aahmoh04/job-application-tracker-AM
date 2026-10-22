@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { getAnalytics } from "@/lib/analytics/cached";
 import { QUIET_AFTER_DAYS, WEEKS_SHOWN } from "@/lib/analytics/queries";
-import { getSession } from "@/lib/auth/cookies";
+import { requireUser } from "@/lib/auth/guard";
 import {
   FunnelChart,
   QuietList,
@@ -17,17 +16,10 @@ export const metadata: Metadata = {
 };
 
 export default async function AnalyticsPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/sign-in");
-  }
+  const user = await requireUser();
 
   // From the cache when it holds a current answer, otherwise from Postgres.
-  const { weeks, funnel, sources, durations, quiet } = await getAnalytics(
-    session.userId,
-    new Date(),
-  );
+  const { weeks, funnel, sources, durations, quiet } = await getAnalytics(user.id, new Date());
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-10 px-6 py-12">

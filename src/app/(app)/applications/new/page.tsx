@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import { ApplicationForm, EMPTY_APPLICATION } from "../application-form";
 import { createApplication } from "@/lib/applications/actions";
+import { requireUser } from "@/lib/auth/guard";
 
 export const metadata: Metadata = {
   title: "Add application",
 };
 
-export default function NewApplicationPage() {
+export default async function NewApplicationPage() {
+  // Nothing to load here, but the page answers like every other signed-in page.
+  await requireUser();
+
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-6 py-12">
       <div className="flex flex-col gap-1">

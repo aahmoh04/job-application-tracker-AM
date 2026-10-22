@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { DeleteApplicationButton } from "@/components/delete-application-button";
 import { StatusBadge } from "@/components/status-badge";
 import { advanceStatus, deleteApplication } from "@/lib/applications/actions";
 import { findApplication } from "@/lib/applications/queries";
-import { getSession } from "@/lib/auth/cookies";
+import { currentUser, requireUser } from "@/lib/auth/guard";
 import { dateFormat, dateTimeFormat } from "@/lib/format";
 import { isTerminal, nextStatuses, TRANSITION_LABELS } from "@/lib/pipeline/transitions";
 import type { Status } from "@/generated/prisma/enums";
@@ -29,12 +29,12 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
 }
 
 export async function generateMetadata({ params }: PageProps<"/applications/[id]">) {
-  const session = await getSession();
+  const user = await currentUser();
 
-  if (!session) return { title: "Application" };
+  if (!user) return { title: "Application" };
 
   const { id } = await params;
-  const application = await findApplication(session.userId, id);
+  const application = await findApplication(user.id, id);
 
   return {
     title: application ? `${application.role} at ${application.company.name}` : "Application",
@@ -42,19 +42,14 @@ export async function generateMetadata({ params }: PageProps<"/applications/[id]
 }
 
 export default async function ApplicationDetailPage({ params }: PageProps<"/applications/[id]">) {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/sign-in");
-  }
-
+  const user = await requireUser();
   const { id } = await params;
 
   // Returns null both when the id does not exist and when it belongs to
   // someone else. Answering 404 in both cases is deliberate: a different
   // answer would confirm that the id exists, which is information the caller
   // has no business having.
-  const application = await findApplication(session.userId, id);
+  const application = await findApplication(user.id, id);
 
   if (!application) {
     notFound();

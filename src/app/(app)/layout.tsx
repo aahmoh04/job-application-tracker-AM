@@ -1,19 +1,14 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { signOut } from "@/lib/auth/actions";
-import { getSession } from "@/lib/auth/cookies";
+import { requireUser } from "@/lib/auth/guard";
 
 /**
- * Wraps every signed-in page. The session check sits here as well as in each
- * page, because a layout runs before its pages and catches anything new that
- * gets added under this folder later.
+ * Wraps every signed-in page. Next renders a layout and its page in parallel,
+ * so this check does not replace the one in each page. It makes sure that a
+ * page added later without one still ends in a redirect.
  */
 export default async function AppLayout({ children }: LayoutProps<"/">) {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/sign-in");
-  }
+  await requireUser();
 
   return (
     <>

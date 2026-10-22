@@ -1,6 +1,7 @@
 import { Client } from "pg";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAnalytics } from "@/lib/analytics/cached";
+import { SESSION_ENDED_PATH } from "@/lib/auth/guard";
 import type { SessionPayload } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { closeRedis } from "@/lib/redis";
@@ -8,6 +9,7 @@ import { createApplication, createUser, resetDatabase } from "@/test/database";
 import { form, redirectTarget } from "@/test/next";
 import { resetRedis } from "@/test/redis";
 import {
+  advanceStatus,
   createApplication as createApplicationAction,
   deleteApplication,
   moveApplication,
@@ -78,7 +80,7 @@ beforeEach(async () => {
   await Promise.all([resetDatabase(), resetRedis()]);
   me = (await createUser("me@example.com")).id;
   stranger = (await createUser("stranger@example.com")).id;
-  request.session = { userId: me, role: "USER" };
+  request.session = { userId: me };
 });
 
 afterAll(async () => {
@@ -167,6 +169,76 @@ describe("someone else's application", () => {
 
     expect(target).toBe("/applications");
     await unchanged();
+  });
+});
+
+describe("a session whose account is gone", () => {
+  // The token is still valid for days, but the account behind it was deleted.
+  // Every action has to notice that through the guard, send the session off to
+  // have its cookie cleared and write nothing. Each test fails as soon as its
+  // action trusts the token alone.
+  let mine: string;
+
+  beforeEach(async () => {
+    mine = (
+      await createApplication(me, {
+        status: "APPLIED",
+        events: [{ to: "APPLIED", at: new Date(Date.now() - DAY) }],
+      })
+    ).id;
+    request.session = { userId: "an-account-that-was-deleted" };
+  });
+
+  async function snapshot() {
+    return {
+      applications: await prisma.application.count(),
+      events: await prisma.statusEvent.count(),
+      mine: await prisma.application.findUniqueOrThrow({
+        where: { id: mine },
+        select: { role: true, status: true },
+      }),
+    };
+  }
+
+  it("cannot create", async () => {
+    const before = await snapshot();
+
+    expect(
+      await redirectTarget(createApplicationAction({}, applicationForm({ status: "APPLIED" }))),
+    ).toBe(SESSION_ENDED_PATH);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("cannot edit", async () => {
+    const before = await snapshot();
+
+    expect(
+      await redirectTarget(
+        updateApplication(mine, {}, applicationForm({ role: "Changed", status: "APPLIED" })),
+      ),
+    ).toBe(SESSION_ENDED_PATH);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("cannot delete", async () => {
+    const before = await snapshot();
+
+    expect(await redirectTarget(deleteApplication(mine))).toBe(SESSION_ENDED_PATH);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("cannot advance a status from the detail page", async () => {
+    const before = await snapshot();
+
+    expect(await redirectTarget(advanceStatus(mine, "SCREENING"))).toBe(SESSION_ENDED_PATH);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("cannot move a card on the board", async () => {
+    const before = await snapshot();
+
+    expect(await redirectTarget(moveApplication(mine, "SCREENING"))).toBe(SESSION_ENDED_PATH);
+    expect(await snapshot()).toEqual(before);
   });
 });
 

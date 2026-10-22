@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ApplicationForm, type ApplicationFormValues } from "../../application-form";
 import { updateApplication } from "@/lib/applications/actions";
 import { findApplication } from "@/lib/applications/queries";
-import { getSession } from "@/lib/auth/cookies";
+import { requireUser } from "@/lib/auth/guard";
 import { nextStatuses } from "@/lib/pipeline/transitions";
 
 export const metadata: Metadata = {
@@ -18,14 +18,9 @@ function toDateInput(date: Date | null): string {
 export default async function EditApplicationPage({
   params,
 }: PageProps<"/applications/[id]/edit">) {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/sign-in");
-  }
-
+  const user = await requireUser();
   const { id } = await params;
-  const application = await findApplication(session.userId, id);
+  const application = await findApplication(user.id, id);
 
   if (!application) {
     notFound();

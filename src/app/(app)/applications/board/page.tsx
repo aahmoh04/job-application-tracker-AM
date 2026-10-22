@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { isFollowUpDue } from "@/lib/applications/follow-up";
 import { listApplications } from "@/lib/applications/queries";
-import { getSession } from "@/lib/auth/cookies";
+import { requireUser } from "@/lib/auth/guard";
 import { KanbanBoard, type BoardCard } from "./kanban-board";
 
 export const metadata: Metadata = {
@@ -11,13 +10,8 @@ export const metadata: Metadata = {
 };
 
 export default async function BoardPage() {
-  const session = await getSession();
-
-  if (!session) {
-    redirect("/sign-in");
-  }
-
-  const applications = await listApplications(session.userId);
+  const user = await requireUser();
+  const applications = await listApplications(user.id);
   const now = new Date();
 
   // Only what a card shows. Props of a Client Component are written into the
