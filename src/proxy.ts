@@ -13,7 +13,7 @@ import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/session";
  * the signature proves the payload without a lookup.
  */
 
-const PROTECTED_PREFIXES = ["/dashboard", "/applications", "/analytics", "/settings"];
+const PROTECTED_PREFIXES = ["/dashboard", "/applications", "/analytics", "/admin", "/settings"];
 const AUTH_PAGES = ["/sign-in", "/sign-up"];
 
 export async function proxy(request: NextRequest) {

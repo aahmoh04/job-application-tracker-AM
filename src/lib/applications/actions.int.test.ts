@@ -114,10 +114,13 @@ describe("creating", () => {
   });
 });
 
-describe("someone else's application", () => {
+// The same for an admin. The role opens the admin pages and nothing else, it
+// is no key to anyone's applications.
+describe.each(["USER", "ADMIN"] as const)("someone else's application, as %s", (role) => {
   let theirs: string;
 
   beforeEach(async () => {
+    await prisma.user.update({ where: { id: me }, data: { role } });
     theirs = (
       await createApplication(stranger, {
         status: "APPLIED",

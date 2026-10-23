@@ -18,11 +18,14 @@ The block above is maintained by `next dev`. Everything below is about this proj
 - `npm run test:integration` runs every `*.int.test.ts` against a real Postgres and Redis. It needs `docker compose up -d` and uses the `jobtracker_test` database, which it creates and migrates by itself, and Redis database 15. It refuses any database whose name does not end in `_test` and any Redis database but 15, because every test empties what it uses.
 - `npm run format:check`, `npm run lint`, `npm run typecheck` and `npm run build` are the rest of what CI runs on every pull request.
 - `npx prisma db seed` wipes every table before it writes. Never run it against a database whose data matters.
+- `npm run user:role -- <email> <ADMIN|USER>` gives an account a role, against the database in `DATABASE_URL`.
 
 ## Rules the code relies on
 
 - Every read and write of an application carries the user id in its `where` clause. There is no function that loads an application without it, keep it that way.
 - Pages and Server Actions get the signed-in user from `requireUser()` in `src/lib/auth/guard.ts`, never from `getSession()` directly. The token only proves who someone is. Whether the account still exists and what it may do comes from the database. `src/app/(app)/pages.int.test.ts` fails for any page under `(app)` that skips the guard.
+- Admin pages start with `requireAdmin()`. `src/lib/admin` hands out counts and statuses only, never an email, a role title, a company, a note or a link, and the admin role never widens a query for applications.
+- Roles change only in `src/lib/admin/roles.ts`, run through `npm run user:role`. Do not add a page or a Server Action that writes a role.
 - A write that depends on a status puts that status into its `where` clause as well, so two requests cannot both pass a check against the same old state.
 - Every Server Action that writes an application calls `invalidateCache(userId)` from `src/lib/cache.ts` once the write has committed, never before. The analytics are read through that cache, and a write that skips it leaves the page showing old numbers for up to five minutes.
 - Legal status moves live only in `src/lib/pipeline/transitions.ts`. The UI asks it what to offer, and the Server Actions ask it again before they write.
