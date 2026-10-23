@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import type { Role } from "@/generated/prisma/enums";
 import { getSession } from "@/lib/auth/cookies";
@@ -55,4 +55,23 @@ export async function requireUser(): Promise<CurrentUser> {
   // proxy sends /sign-in straight back to the dashboard while that token is
   // set. So this case goes through a route that clears the cookie first.
   redirect((await getSession()) ? SESSION_ENDED_PATH : "/sign-in");
+}
+
+/**
+ * The signed-in user, if their role is ADMIN at this moment. Everyone else
+ * gets the same 404 as for a page that does not exist, the way a stranger's
+ * application answers. Next has forbidden() for a 403, but only behind an
+ * experimental flag.
+ *
+ * The role only ever opens the admin pages. It is no key to anyone's
+ * applications, those queries keep their user id like for everyone else.
+ */
+export async function requireAdmin(): Promise<CurrentUser> {
+  const user = await requireUser();
+
+  if (user.role !== "ADMIN") {
+    notFound();
+  }
+
+  return user;
 }

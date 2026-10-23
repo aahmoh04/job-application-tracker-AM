@@ -7,8 +7,13 @@ import { z } from "zod";
  */
 
 // Trim and lowercase first, then validate the result. The other way round,
-// " Test@Example.DE " fails before it is ever cleaned up.
-const email = z.string().trim().toLowerCase().pipe(z.email("Please enter a valid email address."));
+// " Test@Example.DE " fails before it is ever cleaned up. Exported for the
+// role script, which has to find an account the same way sign-in does.
+export const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.email("Please enter a valid email address."));
 
 // Length over composition rules, following NIST SP 800-63B. "P@ssw0rd!" ticks
 // every uppercase-digit-symbol box and still sits near the top of every
@@ -20,7 +25,7 @@ const password = z
 
 export const signUpSchema = z
   .object({
-    email,
+    email: emailSchema,
     password,
     confirmPassword: z.string(),
   })
@@ -33,7 +38,7 @@ export const signUpSchema = z
 // sign-up rules here would tell an attacker what the rules are, and would lock
 // out accounts created before the rules changed.
 export const signInSchema = z.object({
-  email,
+  email: emailSchema,
   password: z.string().min(1, "Please enter your password."),
 });
 

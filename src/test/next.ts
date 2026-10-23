@@ -25,6 +25,26 @@ export async function redirectTarget(action: Promise<unknown>): Promise<string> 
   throw new Error("Expected the action to redirect, but it returned normally.");
 }
 
+/**
+ * notFound() throws as well, with the digest NEXT_HTTP_ERROR_FALLBACK;404.
+ * True when the page or action ended that way, false when it returned.
+ */
+export async function endsInNotFound(action: Promise<unknown>): Promise<boolean> {
+  try {
+    await action;
+  } catch (error) {
+    const digest = (error as { digest?: unknown } | null)?.digest;
+
+    if (digest === "NEXT_HTTP_ERROR_FALLBACK;404") {
+      return true;
+    }
+
+    throw error;
+  }
+
+  return false;
+}
+
 /** A FormData with the given fields, the way a browser would send the form. */
 export function form(fields: Record<string, string>): FormData {
   const data = new FormData();

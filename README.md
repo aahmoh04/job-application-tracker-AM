@@ -40,7 +40,7 @@ This project is built in public, one milestone at a time. The checklist is the h
 | 06 | Redis rate limiting and caching | [x] |
 | 07 | Follow-up reminders via email | [ ] |
 | 08 | Analytics dashboard | [x] |
-| 09 | Role-based access control | [~] |
+| 09 | Role-based access control | [x] |
 | 10 | Deployment setup and hardening | [x] |
 
 [ ] planned | [~] in progress | [x] done
@@ -112,9 +112,7 @@ Who is making a request is decided in one place. The session token only proves a
 
 Ownership is enforced server-side today. A user sees and edits only their own applications. Every read and every delete carries the user id in its `where` clause, and updates and status moves first load the row with that same scoped query and only write when it was found. Hiding a button in the UI is treated as cosmetics rather than as a security control.
 
-Planned on top of that.
-
-- **Roles (M09).** The `role` column exists and defaults to `USER`, and the guard already reads it fresh from the database on every request. An `ADMIN` operations view with aggregate platform metrics and no access to the content of anyone's applications is not built yet.
+The role decides one thing. An account with the `ADMIN` role gets a page at `/admin` with numbers about the platform. How many accounts there are, how many joined or were active lately, how they sign in, and how many applications sit in each status. It shows no application, email or company name of any account, and the role is no key to anyone's applications either, every query for them keeps its user id for admins as well. Everyone else gets the same 404 as for a page that does not exist. Roles are given with `npm run user:role`, the app itself has no page or action that changes one.
 
 ---
 
@@ -273,6 +271,8 @@ npm run dev                   # http://localhost:3000
 
 Then sign in as `demo@example.com` with the password `demo-password-123`. The demo account comes with seven applications spread across the pipeline, so the list, the board and the timelines have something to show. The seed wipes every table before it writes, so run it on a fresh database and never on one whose data you want to keep.
 
+To see the admin page as well, give the demo account the role with `npm run user:role -- demo@example.com ADMIN`. It applies with the next click, without signing in again.
+
 ### Environment variables
 
 | Variable | Purpose |
@@ -305,6 +305,7 @@ For GitHub sign-in, create an OAuth app at github.com/settings/developers with t
 | `npm run db:migrate` | Create and apply a migration in development |
 | `npm run db:seed` | Wipe the database and load demo data |
 | `npm run db:studio` | Browse the database in the browser |
+| `npm run user:role -- <email> <ADMIN\|USER>` | Give an account a role. The only way a role changes |
 
 ### Deploying your own copy
 
@@ -332,6 +333,8 @@ both needs a managed Redis as well.
 4. After the first build, put the real address into the OAuth app as
    `https://<your-domain>/api/auth/github/callback` and into
    `NEXT_PUBLIC_APP_URL`, then redeploy.
+5. For the admin page, sign up once and then run `npm run user:role` on your
+   machine with the production `DATABASE_URL` set for that one command.
 
 `vercel.json` runs `prisma migrate deploy` before `next build`, so every
 deployment carries its own schema changes to the database first. A deployment
@@ -357,6 +360,7 @@ src/
     page.tsx              landing page
     (auth)/               sign-in and sign-up pages, form actions, OAuth buttons
     (app)/                everything behind a session, the layout checks it again
+      admin/              platform numbers for admins, no content of any account
       dashboard/          counts and shortcuts
       analytics/          five questions about the search, answered in SQL
       applications/       list, detail, create, edit
@@ -367,6 +371,7 @@ src/
   components/             status badge, delete button
   generated/prisma/       Prisma client, generated and gitignored
   lib/
+    admin/                the numbers behind the admin page, and the one place roles change
     auth/                 the guard, sessions, Argon2id hashing, cookies, redirects, GitHub OAuth
     applications/         queries, Server Actions, the follow-up rule, ownership in every where clause
     analytics/            the SQL behind the analytics page, cached per user, with integration tests
@@ -384,6 +389,8 @@ prisma/
   schema.prisma
   migrations/
   seed.ts
+scripts/
+  set-role.ts             gives an account a role, run as npm run user:role
 ```
 
 Tests sit next to the code they test, as `*.test.ts`. The ones that need a database end in `.int.test.ts`, and their helpers live in `src/test/`.
@@ -403,7 +410,7 @@ Shipping order, one milestone at a time. The numbers match the status table abov
 - **M06 Redis.** Sliding-window rate limits on sign-in and sign-up, and the analytics behind a per-user cache with versioned keys, invalidated by every write
 - **M07 Reminders.** Daily cron sweep, idempotent sending, React Email templates through Resend
 - **M08 Analytics.** Five questions answered in SQL, weekly volume, a funnel from the status history, answer rate and median response time by source, time in stage with `LAG`, quiet applications. Integration tests against Postgres, locally and in CI
-- **M09 RBAC.** One guard for every page and Server Action that reads the account fresh from the database, done. An admin operations view with platform numbers and no access to anyone's applications, next
+- **M09 RBAC.** One guard for every page and Server Action that reads the account fresh from the database, and an admin page with platform numbers that shows no account's content. Roles change only through a script
 - **M10 Ship.** Everything a deployment needs, without running a public instance. Migrations inside the build, security headers, functions pinned next to the database, preview builds kept away from production, a demo account in the seed and screenshots in this README. Redis stays optional, without it the rate limits and the cache step aside
 
 ### Later, if the core holds up
@@ -426,6 +433,7 @@ Things worth writing down as I go, filled in milestone by milestone.
 - **What changed when the analytics moved behind a cache.** Less than the word suggests, and that is the honest part. With a few dozen applications the five queries take milliseconds, so nobody would notice the cache. It is here to build the pattern once, and its hard part is invalidation, not storage. Every user has a version number in Redis, and each cached answer carries the version it was computed under in its key. A write bumps the version once it has committed, which makes every older answer unreachable at once. Deleting the entry instead would leave a gap. A page view that read the old data just before the write could store its result right after the delete, and the old numbers would be back until they expire. With versions that late result lands under the old number, where nobody looks. Bumping before the commit would open the same gap from the other side. Both moments are held open in tests, and each test fails as soon as its rule is taken out. The plan said to invalidate when a `StatusEvent` is written, but the source, the date sent and the role feed the numbers too, so every save and every deletion invalidates. Entries still expire after five minutes, because two answers depend on the clock and because an invalidation lost to a Redis hiccup should not leave wrong numbers behind for long. Without Redis the page reads straight from Postgres
 - **How the security rules are tested.** The rules that keep data safe run as integration tests against Postgres. A stranger's application cannot be edited, deleted or moved, GitHub never links onto an account with a password, a wrong password and an unknown address get the same answer, and `next` cannot lead off the site. Each of these tests was checked by deleting the rule it guards and watching exactly that test fail. The race between two tabs needed more than that. Two requests in a test rarely overlap, because the second one is still opening its connection when the first has finished, so a test that simply fires both passes even without the guard. A third connection now locks the row, both requests read the same status and queue up behind the lock, and only then is it released. With the status in the `where` clause one write wins every time, without it both get through every time
 - **Why the token carries no role, and what happens to a deleted account.** The session is a signed JWT that stays valid for a week, and whatever is written into it stays true for that week. A role in the token would let a demoted admin keep the role until it runs out. So the token only says who someone is, and `requireUser()` in `src/lib/auth/guard.ts` reads the account and its role from the database on every request. That is one lookup by primary key, and React's `cache()` lets the layout, the page and `generateMetadata` share it. The same lookup notices a deleted account, which used to end in a loop. The dashboard sent a session without an account to the sign-in page, and the proxy, which only checks the signature, sent the still valid token straight back to the dashboard. Pages cannot change cookies, so the guard now sends such a session to a small Route Handler that clears the cookie, and only when the account is really gone, so a link to it cannot sign anyone out. Tests cover every action and every page, the pages found by file name, and each test fails as soon as its guard is replaced by a check of the token alone
+- **Why an admin sees numbers and not applications, and why roles come from a script.** Least privilege. Running a platform takes knowing how it is used, not reading anyone's job search, so the admin page only gets counts and statuses, and the type it receives has no field that could carry an email or a company. A test plants such content and fails if any of it reaches the page. The role opens the admin page and nothing else. Every query for applications keeps its user id for admins too, and the tests for a stranger's application run once as a user and once as an admin. Roles change only through `npm run user:role`, because a role that the app can write is a role that a bug in the app can hand out. A list of admin emails in an environment variable was the other option, but sign-up does not confirm addresses yet, so anyone could register such an address first. One honest limit remains. With three accounts the counts are not anonymous, a single GitHub account is a person. A platform with real users would hide small numbers, this one does not yet
 - **Why the pipeline lives in one module.** Every legal move is listed exactly once, in `src/lib/pipeline/transitions.ts`. The edit form, the status buttons on the detail page and the Kanban board all ask that module which moves to offer, and the Server Actions ask it again before anything is written, because a status posted by a browser is just a string until the server has checked it. The table is typed with `satisfies Record<Status, readonly Status[]>`, so adding a status to the Prisma enum without deciding where it may go breaks the build. Spreading the rules across the UI would have meant three places that can disagree, and the board would have been the first to drift
 
 Still to write, once the milestone lands.

@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/auth/guard";
  * page added later without one still ends in a redirect.
  */
 export default async function AppLayout({ children }: LayoutProps<"/">) {
-  await requireUser();
+  const user = await requireUser();
 
   return (
     <>
@@ -23,6 +23,13 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           <Link href="/analytics" className="text-sm text-zinc-600 dark:text-zinc-400">
             Analytics
           </Link>
+          {/* A shortcut only. The admin page checks the role itself, a link
+              that is not shown protects nothing. */}
+          {user.role === "ADMIN" ? (
+            <Link href="/admin" className="text-sm text-zinc-600 dark:text-zinc-400">
+              Admin
+            </Link>
+          ) : null}
           <form action={signOut} className="ml-auto">
             <button type="submit" className="text-sm text-zinc-600 dark:text-zinc-400">
               Sign out

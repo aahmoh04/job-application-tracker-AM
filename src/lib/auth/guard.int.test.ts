@@ -2,8 +2,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionPayload } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { createUser, resetDatabase } from "@/test/database";
-import { redirectTarget } from "@/test/next";
-import { SESSION_ENDED_PATH, currentUser, requireUser } from "./guard";
+import { endsInNotFound, redirectTarget } from "@/test/next";
+import { SESSION_ENDED_PATH, currentUser, requireAdmin, requireUser } from "./guard";
 
 // The session comes from here, because next/headers needs a running Next
 // request. The account behind it comes from the real database.
@@ -50,6 +50,38 @@ describe("requireUser", () => {
     await prisma.user.delete({ where: { id: me } });
 
     expect(await redirectTarget(requireUser())).toBe(SESSION_ENDED_PATH);
+  });
+});
+
+describe("requireAdmin", () => {
+  async function makeMe(role: "USER" | "ADMIN") {
+    await prisma.user.update({ where: { id: me }, data: { role } });
+  }
+
+  it("lets an admin through", async () => {
+    await makeMe("ADMIN");
+
+    expect((await requireAdmin()).role).toBe("ADMIN");
+  });
+
+  it("answers everyone else with a 404", async () => {
+    expect(await endsInNotFound(requireAdmin())).toBe(true);
+  });
+
+  it("closes with the next request once the role is gone, on the same token", async () => {
+    await makeMe("ADMIN");
+    expect(await endsInNotFound(requireAdmin())).toBe(false);
+
+    await makeMe("USER");
+    expect(await endsInNotFound(requireAdmin())).toBe(true);
+  });
+
+  it("sends a signed-out visitor and a dead session where requireUser sends them", async () => {
+    request.session = null;
+    expect(await redirectTarget(requireAdmin())).toBe("/sign-in");
+
+    request.session = { userId: "an-account-that-was-deleted" };
+    expect(await redirectTarget(requireAdmin())).toBe(SESSION_ENDED_PATH);
   });
 });
 
