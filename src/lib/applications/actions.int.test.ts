@@ -313,6 +313,61 @@ describe("moving my own application", () => {
   });
 });
 
+describe("editing my own application", () => {
+  let mine: string;
+
+  beforeEach(async () => {
+    mine = (
+      await createApplication(me, {
+        status: "APPLIED",
+        followUpAt: new Date("2026-10-20T00:00:00Z"),
+        events: [{ to: "APPLIED", at: new Date(Date.now() - DAY) }],
+      })
+    ).id;
+
+    // A reminder for the follow-up date already went out.
+    await prisma.application.update({
+      where: { id: mine },
+      data: { notes: "Call Anna", reminderSentAt: new Date("2026-10-20T05:00:00Z") },
+    });
+  });
+
+  async function saved() {
+    return prisma.application.findUniqueOrThrow({ where: { id: mine } });
+  }
+
+  it("removes what was cleared in the form instead of keeping the old value", async () => {
+    await redirectTarget(
+      updateApplication(mine, {}, applicationForm({ status: "APPLIED", followUpAt: "" })),
+    );
+
+    expect(await saved()).toMatchObject({ followUpAt: null, notes: null });
+  });
+
+  it("turns a new follow-up date into a new reminder", async () => {
+    await redirectTarget(
+      updateApplication(mine, {}, applicationForm({ status: "APPLIED", followUpAt: "2026-11-03" })),
+    );
+
+    expect(await saved()).toMatchObject({
+      followUpAt: new Date("2026-11-03T00:00:00Z"),
+      reminderSentAt: null,
+    });
+  });
+
+  it("keeps the reminder as sent when the date stays the same", async () => {
+    await redirectTarget(
+      updateApplication(
+        mine,
+        {},
+        applicationForm({ status: "APPLIED", followUpAt: "2026-10-20", notes: "Called Anna" }),
+      ),
+    );
+
+    expect((await saved()).reminderSentAt).toEqual(new Date("2026-10-20T05:00:00Z"));
+  });
+});
+
 describe("the cached analytics", () => {
   // Each test reads the analytics once before the write, which fills the
   // cache. The read after the write only sees the change if the action

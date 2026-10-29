@@ -12,6 +12,10 @@ process.env.TEST_DATABASE_URL ??=
 // and src/test/redis.ts refuses to flush any other.
 process.env.TEST_REDIS_URL ??= "redis://127.0.0.1:6379/15";
 
+// The test inbox from docker-compose.yml. Tests send to addresses of their own
+// and read them back through its API, see src/test/mailpit.ts.
+process.env.TEST_MAILPIT_URL ??= "http://127.0.0.1:8025";
+
 export default defineConfig({
   // Next understands "@/..." because tsconfig says so, but Vitest does not read
   // tsconfig paths. The pipeline test imports the generated Prisma enums, so the
@@ -41,6 +45,9 @@ export default defineConfig({
             // rate limits stay switched off.
             DATABASE_URL: "",
             REDIS_URL: "",
+            // No transport either, so a unit test can never send a mail.
+            MAILPIT_URL: "",
+            RESEND_API_KEY: "",
           },
         },
       },
@@ -59,6 +66,11 @@ export default defineConfig({
             REDIS_URL: process.env.TEST_REDIS_URL,
             // The auth tests sign real session tokens.
             JWT_SECRET: "test-secret-that-is-long-enough-for-hs256-abcdef",
+            // Mail goes to the test inbox and never to Resend, whatever .env says.
+            MAILPIT_URL: process.env.TEST_MAILPIT_URL,
+            RESEND_API_KEY: "",
+            MAIL_FROM: "reminders@jobtracker.test",
+            NEXT_PUBLIC_APP_URL: "http://localhost:3000",
           },
         },
       },

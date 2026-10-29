@@ -48,13 +48,17 @@ enum Source {
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id              String    @id @default(cuid())
+  email           String    @unique
   /// Null for users who only ever signed in through OAuth.
-  passwordHash String?
-  role         Role     @default(USER)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  passwordHash    String?
+  /// When the owner of the address was proven. GitHub proves it for the accounts
+  /// it creates. Sign-up does not yet, so password accounts stay null for now.
+  /// Mail only goes to addresses with this set.
+  emailVerifiedAt DateTime?
+  role            Role      @default(USER)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   accounts     Account[]
   applications Application[]

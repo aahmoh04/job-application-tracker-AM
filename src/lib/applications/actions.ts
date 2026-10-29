@@ -115,7 +115,7 @@ export async function updateApplication(
   // row belongs to someone else it is not found, and nothing below runs.
   const existing = await prisma.application.findFirst({
     where: { id: applicationId, userId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, followUpAt: true },
   });
 
   if (!existing) {
@@ -146,6 +146,24 @@ export async function updateApplication(
   const company = await upsertCompany(companyName);
   const statusChanged = status !== existing.status;
 
+  // An emptied field arrives as undefined, and Prisma reads undefined as
+  // "leave it as it is". On an edit the user means "remove it", so every
+  // optional field is written as null instead. Before this, a cleared
+  // follow-up date, note, link or salary quietly kept its old value.
+  const values = {
+    ...fields,
+    salaryMin: fields.salaryMin ?? null,
+    salaryMax: fields.salaryMax ?? null,
+    postingUrl: fields.postingUrl ?? null,
+    notes: fields.notes ?? null,
+    appliedAt: fields.appliedAt ?? null,
+    followUpAt: fields.followUpAt ?? null,
+  };
+
+  // A new follow-up date is a new reminder. The old timestamp belongs to the
+  // date it was sent for and would otherwise keep the new one silent.
+  const followUpMoved = values.followUpAt?.getTime() !== existing.followUpAt?.getTime();
+
   // Both writes in one transaction. A status change that is saved without its
   // history entry would leave a timeline that quietly lies.
   //
@@ -156,7 +174,12 @@ export async function updateApplication(
   const saved = await prisma.$transaction(async (tx) => {
     const { count } = await tx.application.updateMany({
       where: { id: existing.id, userId, status: existing.status },
-      data: { ...fields, status, companyId: company.id },
+      data: {
+        ...values,
+        status,
+        companyId: company.id,
+        ...(followUpMoved ? { reminderSentAt: null } : {}),
+      },
     });
 
     if (count === 0) {

@@ -6,8 +6,12 @@ export async function resetDatabase() {
   await prisma.$executeRaw`TRUNCATE "User", "Company" CASCADE`;
 }
 
-export function createUser(email: string) {
-  return prisma.user.create({ data: { email, passwordHash: null }, select: { id: true } });
+/** An account without a password. `verified` says whether mail may go to it. */
+export function createUser(email: string, { verified = false }: { verified?: boolean } = {}) {
+  return prisma.user.create({
+    data: { email, passwordHash: null, emailVerifiedAt: verified ? new Date() : null },
+    select: { id: true },
+  });
 }
 
 type ApplicationFixture = {
@@ -16,6 +20,7 @@ type ApplicationFixture = {
   role?: string;
   company?: string;
   appliedAt?: Date | null;
+  followUpAt?: Date | null;
   /** The status history in order. Each event starts where the previous one ended. */
   events: { to: Status; at: Date }[];
 };
@@ -38,6 +43,7 @@ export async function createApplication(userId: string, fixture: ApplicationFixt
       status: fixture.status,
       source: fixture.source ?? "DIRECT",
       appliedAt: fixture.appliedAt ?? null,
+      followUpAt: fixture.followUpAt ?? null,
       statusEvents: {
         create: fixture.events.map((event, index) => ({
           from: index === 0 ? null : fixture.events[index - 1].to,

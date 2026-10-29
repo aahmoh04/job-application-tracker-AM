@@ -15,10 +15,11 @@ The block above is maintained by `next dev`. Everything below is about this proj
 ## Commands
 
 - `npm test` runs the unit tests. They need no database and run with an empty `DATABASE_URL`, so a unit test that reaches for the database fails at once.
-- `npm run test:integration` runs every `*.int.test.ts` against a real Postgres and Redis. It needs `docker compose up -d` and uses the `jobtracker_test` database, which it creates and migrates by itself, and Redis database 15. It refuses any database whose name does not end in `_test` and any Redis database but 15, because every test empties what it uses.
+- `npm run test:integration` runs every `*.int.test.ts` against a real Postgres, Redis and Mailpit. It needs `docker compose up -d` and uses the `jobtracker_test` database, which it creates and migrates by itself, and Redis database 15. Mails go to fresh addresses only, so nothing has to be deleted in Mailpit. It refuses any database whose name does not end in `_test` and any Redis database but 15, because every test empties what it uses.
 - `npm run format:check`, `npm run lint`, `npm run typecheck` and `npm run build` are the rest of what CI runs on every pull request.
 - `npx prisma db seed` wipes every table before it writes. Never run it against a database whose data matters.
 - `npm run user:role -- <email> <ADMIN|USER>` gives an account a role, against the database in `DATABASE_URL`.
+- Mailpit from `docker compose up -d` shows every mail the app sends locally at http://localhost:8025. The reminder job runs with `curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/reminders`.
 
 ## Rules the code relies on
 
@@ -26,6 +27,8 @@ The block above is maintained by `next dev`. Everything below is about this proj
 - Pages and Server Actions get the signed-in user from `requireUser()` in `src/lib/auth/guard.ts`, never from `getSession()` directly. The token only proves who someone is. Whether the account still exists and what it may do comes from the database. `src/app/(app)/pages.int.test.ts` fails for any page under `(app)` that skips the guard.
 - Admin pages start with `requireAdmin()`. `src/lib/admin` hands out counts and statuses only, never an email, a role title, a company, a note or a link, and the admin role never widens a query for applications.
 - Roles change only in `src/lib/admin/roles.ts`, run through `npm run user:role`. Do not add a page or a Server Action that writes a role.
+- The reminder job claims due follow-ups by setting `reminderSentAt` in one `UPDATE` that only matches empty ones, and sends afterwards. Never send first and mark after, `src/lib/reminders/job.int.test.ts` holds a second run open to catch exactly that.
+- Mail only goes to users with `emailVerifiedAt` set. A changed follow-up date clears `reminderSentAt`, and an edit writes cleared optional fields as null, never as undefined.
 - A write that depends on a status puts that status into its `where` clause as well, so two requests cannot both pass a check against the same old state.
 - Every Server Action that writes an application calls `invalidateCache(userId)` from `src/lib/cache.ts` once the write has committed, never before. The analytics are read through that cache, and a write that skips it leaves the page showing old numbers for up to five minutes.
 - Legal status moves live only in `src/lib/pipeline/transitions.ts`. The UI asks it what to offer, and the Server Actions ask it again before they write.

@@ -2,5 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "prisma migrate deploy && next build",
   "regions": ["fra1"],
-  "ignoreCommand": "[ \"$VERCEL_ENV\" = \"preview\" ]"
+  "ignoreCommand": "[ \"$VERCEL_ENV\" = \"preview\" ]",
+  "crons": [{ "path": "/api/cron/reminders", "schedule": "0 5 * * *" }]
 }
