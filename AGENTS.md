@@ -40,6 +40,7 @@ The block above is maintained by `next dev`. Everything below is about this proj
 ## Conventions
 
 - Tests sit next to the code they test. Helpers for the integration tests live in `src/test/`.
+- `@types/node` stays on the Node major that CI and the machines run, 22 today. Dependabot ignores its majors on purpose, raise it together with the Node version.
 - UI text and docs only use characters found on a keyboard. No arrows, typographic dashes or ellipsis characters, write `->` and `...` instead.
 - Comments explain why, not what.
 - One pull request per change, with a plain English title and a description that ends with how it was checked.
