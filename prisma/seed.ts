@@ -51,6 +51,9 @@ async function main() {
       // Hashed exactly like a real sign-up, so signing in as the demo user
       // takes the normal path through the app.
       passwordHash: await hashPassword(DEMO_PASSWORD),
+      // Sign-up cannot confirm an address yet. The demo account counts as
+      // confirmed anyway, so the reminder mails have someone to go to locally.
+      emailVerifiedAt: new Date(),
     },
   });
 

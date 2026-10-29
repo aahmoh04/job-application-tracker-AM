@@ -113,9 +113,16 @@ async function linkOrCreateUser(providerAccountId: string, email: string) {
       return null;
     }
 
-    await prisma.account.create({
-      data: { userId: existingUser.id, provider: PROVIDER, providerAccountId },
-    });
+    // GitHub has just confirmed that the address belongs to this person.
+    await prisma.$transaction([
+      prisma.account.create({
+        data: { userId: existingUser.id, provider: PROVIDER, providerAccountId },
+      }),
+      prisma.user.updateMany({
+        where: { id: existingUser.id, emailVerifiedAt: null },
+        data: { emailVerifiedAt: new Date() },
+      }),
+    ]);
 
     return { id: existingUser.id };
   }
@@ -126,6 +133,8 @@ async function linkOrCreateUser(providerAccountId: string, email: string) {
       // No password. This account can only be reached through GitHub until the
       // user sets one, which is why passwordHash is nullable in the schema.
       passwordHash: null,
+      // Only addresses GitHub reports as verified get this far.
+      emailVerifiedAt: new Date(),
       accounts: {
         create: { provider: PROVIDER, providerAccountId },
       },

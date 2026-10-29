@@ -36,6 +36,21 @@ services:
       timeout: 5s
       retries: 10
 
+  # A test inbox. Every mail the app sends locally lands here instead of in a
+  # real mailbox, readable at http://localhost:8025. The app talks to its HTTP
+  # API, so the SMTP port stays closed.
+  mailpit:
+    image: axllent/mailpit:v1.32
+    container_name: jobtracker-mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   postgres-data:
   redis-data:

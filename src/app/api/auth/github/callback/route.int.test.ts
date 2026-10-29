@@ -106,6 +106,7 @@ describe("the GitHub callback", () => {
 
     expect(response.headers.get("location")).toBe("http://localhost:3000/applications");
     expect(user.passwordHash).toBeNull();
+    expect(user.emailVerifiedAt).not.toBeNull();
     expect(user.accounts).toMatchObject([{ provider: "github", providerAccountId: "4242" }]);
     expect(await sessionUserId()).toBe(user.id);
 
@@ -143,6 +144,10 @@ describe("the GitHub callback", () => {
 
     expect(await sessionUserId()).toBe(existing.id);
     expect(await prisma.account.findMany({ where: { userId: existing.id } })).toHaveLength(1);
+    // GitHub vouched for the address, so mail may go there now.
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: existing.id } })).emailVerifiedAt,
+    ).not.toBeNull();
   });
 
   it("refuses to link onto an account with a password and writes nothing", async () => {
@@ -158,6 +163,9 @@ describe("the GitHub callback", () => {
     );
     expect(await prisma.account.count()).toBe(0);
     expect(jar.token).toBeNull();
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { email: GITHUB_EMAIL } })).emailVerifiedAt,
+    ).toBeNull();
   });
 
   it("turns away a GitHub account without a verified address", async () => {
