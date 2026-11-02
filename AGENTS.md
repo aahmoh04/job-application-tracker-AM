@@ -28,6 +28,7 @@ The block above is maintained by `next dev`. Everything below is about this proj
 - Admin pages start with `requireAdmin()`. `src/lib/admin` hands out counts and statuses only, never an email, a role title, a company, a note or a link, and the admin role never widens a query for applications.
 - Roles change only in `src/lib/admin/roles.ts`, run through `npm run user:role`. Do not add a page or a Server Action that writes a role.
 - The reminder job claims due follow-ups by setting `reminderSentAt` in one `UPDATE` that only matches empty ones, and sends afterwards. Never send first and mark after, `src/lib/reminders/job.int.test.ts` holds a second run open to catch exactly that.
+- Confirmation tokens are stored only as SHA-256 hashes, last a day and work once, and a new link replaces older ones. Opening the link never changes anything, only the button on its page confirms, see `src/app/confirm-email/page.int.test.ts`.
 - Mail only goes to users with `emailVerifiedAt` set. A changed follow-up date clears `reminderSentAt`, and an edit writes cleared optional fields as null, never as undefined.
 - A write that depends on a status puts that status into its `where` clause as well, so two requests cannot both pass a check against the same old state.
 - Every Server Action that writes an application calls `invalidateCache(userId)` from `src/lib/cache.ts` once the write has committed, never before. The analytics are read through that cache, and a write that skips it leaves the page showing old numbers for up to five minutes.

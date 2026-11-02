@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escapeHtml, reminderMail, type DueFollowUp } from "./mail";
+import { reminderMail, type DueFollowUp } from "./mail";
 
 const APP_URL = "http://localhost:3000";
 
@@ -63,13 +63,5 @@ describe("reminderMail", () => {
 
     expect(mail.subject).toBe("Time to follow up with Northwind Bcc: someone@example.com");
     expect(mail.subject).not.toMatch(/[\r\n]/);
-  });
-});
-
-describe("escapeHtml", () => {
-  it("turns the five characters that mean something in HTML into entities", () => {
-    expect(escapeHtml(`<a href="x">Tom & Jerry's</a>`)).toBe(
-      "&lt;a href=&quot;x&quot;&gt;Tom &amp; Jerry&#39;s&lt;/a&gt;",
-    );
   });
 });

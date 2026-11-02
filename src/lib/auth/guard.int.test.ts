@@ -27,7 +27,12 @@ afterAll(async () => {
 
 describe("requireUser", () => {
   it("returns the account behind the session, loaded from the database", async () => {
-    expect(await requireUser()).toEqual({ id: me, email: "me@example.com", role: "USER" });
+    expect(await requireUser()).toEqual({
+      id: me,
+      email: "me@example.com",
+      role: "USER",
+      emailVerifiedAt: null,
+    });
   });
 
   it("sees a changed role on the very next request, with the same token", async () => {

@@ -17,6 +17,8 @@ export type CurrentUser = {
   id: string;
   email: string;
   role: Role;
+  /** Null until the address is confirmed. The dashboard asks for it then. */
+  emailVerifiedAt: Date | null;
 };
 
 /** Where a session goes whose account no longer exists. */
@@ -36,7 +38,7 @@ export const currentUser = cache(async (): Promise<CurrentUser | null> => {
 
   return prisma.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, email: true, role: true },
+    select: { id: true, email: true, role: true, emailVerifiedAt: true },
   });
 });
 

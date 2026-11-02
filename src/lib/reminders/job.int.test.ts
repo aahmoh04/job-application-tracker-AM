@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Status } from "@/generated/prisma/enums";
+import { confirmEmail, issueConfirmation } from "@/lib/confirmation/tokens";
 import { prisma } from "@/lib/db";
 import type { Mail } from "@/lib/mail/send";
 import { createApplication, createUser, resetDatabase } from "@/test/database";
@@ -103,6 +104,20 @@ describe("sendDueReminders", () => {
     expect(sent).toHaveLength(0);
     // Still waiting, so the reminder goes out once the address is confirmed.
     expect(await reminderSentAt(theirs)).toBeNull();
+  });
+
+  it("starts writing to a password account once its address is confirmed", async () => {
+    const address = freshAddress("password-account");
+    const account = (await createUser(address)).id;
+    await followUp(account, day(-1), { role: "Waiting for the click" });
+    const { sent, send } = outbox();
+
+    expect(await sendDueReminders(NOW, send)).toEqual({ users: 0, mails: 0, failed: 0 });
+
+    expect(await confirmEmail(await issueConfirmation(account))).toBe(true);
+
+    expect(await sendDueReminders(NOW, send)).toEqual({ users: 1, mails: 1, failed: 0 });
+    expect(sent.map((mail) => mail.to)).toEqual([address]);
   });
 
   it("sends nothing the second time", async () => {

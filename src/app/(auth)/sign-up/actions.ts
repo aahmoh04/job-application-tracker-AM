@@ -6,6 +6,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { setSessionCookie } from "@/lib/auth/cookies";
 import { hashPassword } from "@/lib/auth/password";
 import { createSessionToken } from "@/lib/auth/session";
+import { sendConfirmation } from "@/lib/confirmation/tokens";
 import { prisma } from "@/lib/db";
 import { SIGN_UPS_PER_ADDRESS, hit, retryMessage } from "@/lib/rate-limit";
 import { clientAddress } from "@/lib/request";
@@ -51,8 +52,8 @@ export async function signUp(_prevState: SignUpState, formData: FormData): Promi
 
   // Hash before touching the database, so a taken address does not answer
   // measurably faster. Right now that protects nothing, because the error
-  // below says openly that the address is taken. It starts to matter once
-  // sign-up confirms addresses by mail and can stop saying so.
+  // below says openly that the address is taken. Now that sign-up confirms
+  // addresses by mail it could stop saying so, and then this matters.
   const passwordHash = await hashPassword(password);
 
   let user;
@@ -71,7 +72,15 @@ export async function signUp(_prevState: SignUpState, formData: FormData): Promi
   const token = await createSessionToken({ userId: user.id });
   await setSessionCookie(token);
 
-  // Outside the try/catch above. redirect() works by throwing a special error
+  // The confirmation link. A mail that fails does not undo the sign-up, the
+  // dashboard offers to send the link again.
+  try {
+    await sendConfirmation(user);
+  } catch (error) {
+    console.error("Confirmation mail failed, the dashboard offers to send it again.", error);
+  }
+
+  // Outside the try/catch blocks above. redirect() works by throwing a special error
   // that Next catches itself, so a catch block would swallow the redirect.
   redirect("/dashboard");
 }

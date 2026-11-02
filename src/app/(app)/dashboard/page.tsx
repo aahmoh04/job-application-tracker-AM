@@ -2,17 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { countApplications, countDueFollowUps } from "@/lib/applications/queries";
 import { requireUser } from "@/lib/auth/guard";
+import { ConfirmationNotice } from "./confirmation-notice";
 
 export const metadata: Metadata = {
   title: "Dashboard",
 };
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   // The layout already turned anonymous visitors away, and the proxy before
   // that. This check is here anyway, because a guard that lives in only one
   // place is one configuration mistake away from being gone. CVE-2025-29927
   // was exactly that: a header that made Next skip middleware entirely.
   const user = await requireUser();
+  const { confirmed } = await searchParams;
 
   const [applicationCount, openFollowUps] = await Promise.all([
     countApplications(user.id),
@@ -27,6 +29,16 @@ export default async function DashboardPage() {
           Signed in as <span className="font-medium">{user.email}</span>
         </p>
       </div>
+
+      {user.emailVerifiedAt === null ? <ConfirmationNotice email={user.email} /> : null}
+      {confirmed === "1" && user.emailVerifiedAt !== null ? (
+        <p
+          role="status"
+          className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+        >
+          Your address is confirmed. Reminder mails can reach you now.
+        </p>
+      ) : null}
 
       <dl className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">

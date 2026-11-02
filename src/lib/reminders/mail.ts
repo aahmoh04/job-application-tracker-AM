@@ -1,12 +1,10 @@
 import { dateFormat } from "@/lib/format";
+import { escapeHtml, oneLine } from "@/lib/mail/html";
 import type { Mail } from "@/lib/mail/send";
 
 /**
  * The reminder mail, one per user and run, listing every follow-up that came
- * due. A function rather than a React component, because react-dom/server
- * refuses to load in the server layer where Route Handlers run, and two short
- * templates do not need it. Everything the user typed is escaped before it
- * goes into the HTML.
+ * due. Everything the user typed is escaped before it goes into the HTML.
  */
 
 export type DueFollowUp = {
@@ -15,23 +13,6 @@ export type DueFollowUp = {
   company: string;
   followUpAt: Date;
 };
-
-const ESCAPES: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-};
-
-export function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ESCAPES[character]);
-}
-
-/** One line, whatever was typed. A line break has no business in a header. */
-function oneLine(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
 
 const FOOTER = "You get this mail because you set a follow-up date in JobTracker.";
 
