@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { verifySessionToken } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { resetDatabase } from "@/test/database";
+import { freshAddress, inbox } from "@/test/mailpit";
 import { resetRedis } from "@/test/redis";
 import { closeRedis } from "@/lib/redis";
 import { form, redirectTarget } from "@/test/next";
@@ -53,6 +54,23 @@ describe("signUp", () => {
     expect(user.passwordHash).toMatch(/^\$argon2id\$/);
     expect(user.passwordHash).not.toContain(PASSWORD);
     expect(await verifySessionToken(jar.token ?? "")).toEqual({ userId: user.id });
+  });
+
+  it("mails a confirmation link to the new address, which starts unconfirmed", async () => {
+    const address = freshAddress("new-person");
+
+    await redirectTarget(
+      signUp({}, form({ email: address, password: PASSWORD, confirmPassword: PASSWORD })),
+    );
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: address } });
+    const delivered = await inbox(address);
+
+    expect(user.emailVerifiedAt).toBeNull();
+    expect(await prisma.emailConfirmation.count({ where: { userId: user.id } })).toBe(1);
+    expect(delivered.map((mail) => mail.Subject)).toEqual([
+      "Confirm your email address for JobTracker",
+    ]);
   });
 
   it("refuses a taken address, whatever its spelling, and keeps what was typed", async () => {

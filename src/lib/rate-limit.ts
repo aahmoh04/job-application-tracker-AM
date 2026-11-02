@@ -47,6 +47,13 @@ export const SIGN_UPS_PER_ADDRESS: Limit = {
   windowMs: 60 * MINUTE,
 };
 
+/** Confirmation links one account can ask for again after sign-up. */
+export const CONFIRMATION_MAILS_PER_ACCOUNT: Limit = {
+  name: "confirmation:account",
+  max: 3,
+  windowMs: 60 * MINUTE,
+};
+
 export type Verdict = { allowed: true } | { allowed: false; retryAfterMs: number };
 
 /**

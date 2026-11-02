@@ -53,15 +53,31 @@ model User {
   /// Null for users who only ever signed in through OAuth.
   passwordHash    String?
   /// When the owner of the address was proven. GitHub proves it for the accounts
-  /// it creates. Sign-up does not yet, so password accounts stay null for now.
-  /// Mail only goes to addresses with this set.
+  /// it creates, the confirmation link does for password accounts. Reminder
+  /// mails only go to addresses with this set.
   emailVerifiedAt DateTime?
   role            Role      @default(USER)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  accounts     Account[]
-  applications Application[]
+  accounts           Account[]
+  applications       Application[]
+  emailConfirmations EmailConfirmation[]
+}
+
+/// A confirmation link that is still waiting for its click. Only the SHA-256
+/// hash of the token is stored, the token itself only ever travels in the
+/// mail, so a copy of this table opens nothing.
+model EmailConfirmation {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 /// One row per linked OAuth account. GitHub is the only provider so far.
