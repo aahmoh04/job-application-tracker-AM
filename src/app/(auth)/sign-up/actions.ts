@@ -63,13 +63,24 @@ export async function signUp(_prevState: SignUpState, formData: FormData): Promi
   } catch (error) {
     // P2002 is Prisma's code for a unique constraint violation. Here that can
     // only be the email, since it is the single unique column on User.
+    // The hint is for the owner of an address that someone else registered
+    // first. A reset link goes to the address, so it hands the account to
+    // whoever reads that inbox.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return { errors: { email: ["An account with this email already exists."] }, values };
+      return {
+        errors: {
+          email: ["An account with this email already exists. If it is yours, reset its password."],
+        },
+        values,
+      };
     }
     throw error;
   }
 
-  const token = await createSessionToken({ userId: user.id });
+  const token = await createSessionToken({
+    userId: user.id,
+    sessionVersion: user.sessionVersion,
+  });
   await setSessionCookie(token);
 
   // The confirmation link. A mail that fails does not undo the sign-up, the

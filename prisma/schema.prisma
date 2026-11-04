@@ -56,6 +56,10 @@ model User {
   /// it creates, the confirmation link does for password accounts. Reminder
   /// mails only go to addresses with this set.
   emailVerifiedAt DateTime?
+  /// Every session token carries the number this had when it was signed, and
+  /// only a token with the current number counts. A password reset raises it,
+  /// which ends every session from before at once, on every device.
+  sessionVersion  Int       @default(0)
   role            Role      @default(USER)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -63,12 +67,28 @@ model User {
   accounts           Account[]
   applications       Application[]
   emailConfirmations EmailConfirmation[]
+  passwordResets     PasswordReset[]
 }
 
 /// A confirmation link that is still waiting for its click. Only the SHA-256
 /// hash of the token is stored, the token itself only ever travels in the
 /// mail, so a copy of this table opens nothing.
 model EmailConfirmation {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// A link to choose a new password, waiting for its click. Kept like
+/// EmailConfirmation, only the hash of the token, but it lasts an hour
+/// instead of a day, because it opens the whole account.
+model PasswordReset {
   id        String   @id @default(cuid())
   userId    String
   tokenHash String   @unique

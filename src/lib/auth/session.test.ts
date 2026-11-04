@@ -2,7 +2,7 @@ import { SignJWT, decodeJwt } from "jose";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSessionToken, verifySessionToken } from "./session";
 
-const session = { userId: "user_abc123" };
+const session = { userId: "user_abc123", sessionVersion: 2 };
 
 /** A token signed with the test secret, for payloads the app itself never writes. */
 function signed(payload: Record<string, unknown>) {
@@ -74,6 +74,27 @@ describe("verifySessionToken", () => {
   it("accepts a token from before the role moved out and ignores the role in it", async () => {
     const old = await signed({ sub: session.userId, role: "ADMIN" });
 
-    await expect(verifySessionToken(old)).resolves.toEqual(session);
+    await expect(verifySessionToken(old)).resolves.toEqual({
+      userId: session.userId,
+      sessionVersion: 0,
+    });
+  });
+
+  it("counts a token from before session versions as the first generation", async () => {
+    const old = await signed({ sub: session.userId });
+
+    await expect(verifySessionToken(old)).resolves.toEqual({
+      userId: session.userId,
+      sessionVersion: 0,
+    });
+  });
+
+  it("returns null for a session version that is not a whole number", async () => {
+    await expect(
+      verifySessionToken(await signed({ sub: session.userId, sessionVersion: "2" })),
+    ).resolves.toBeNull();
+    await expect(
+      verifySessionToken(await signed({ sub: session.userId, sessionVersion: 1.5 })),
+    ).resolves.toBeNull();
   });
 });

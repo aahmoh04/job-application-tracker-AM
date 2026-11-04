@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { issueConfirmation } from "@/lib/confirmation/tokens";
 import { prisma } from "@/lib/db";
 import { createUser, resetDatabase } from "@/test/database";
+import { renderedText } from "@/test/render";
 import ConfirmEmailPage from "./page";
 
 let me: string;
@@ -15,30 +16,13 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-/** All text in a rendered tree, enough to see which of its two answers the page gave. */
-function text(node: unknown): string {
-  if (typeof node === "string" || typeof node === "number") {
-    return String(node);
-  }
-
-  if (Array.isArray(node)) {
-    return node.map(text).join(" ");
-  }
-
-  if (node && typeof node === "object" && "props" in node) {
-    return text((node as { props: { children?: unknown } }).props.children);
-  }
-
-  return "";
-}
-
 async function openLink(token?: string) {
   const page = await ConfirmEmailPage({
     params: Promise.resolve({}),
     searchParams: Promise.resolve(token === undefined ? {} : { token }),
   });
 
-  return text(page);
+  return renderedText(page);
 }
 
 describe("the page a confirmation link opens", () => {

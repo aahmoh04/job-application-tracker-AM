@@ -80,7 +80,7 @@ beforeEach(async () => {
   await Promise.all([resetDatabase(), resetRedis()]);
   me = (await createUser("me@example.com")).id;
   stranger = (await createUser("stranger@example.com")).id;
-  request.session = { userId: me };
+  request.session = { userId: me, sessionVersion: 0 };
 });
 
 afterAll(async () => {
@@ -189,7 +189,7 @@ describe("a session whose account is gone", () => {
         events: [{ to: "APPLIED", at: new Date(Date.now() - DAY) }],
       })
     ).id;
-    request.session = { userId: "an-account-that-was-deleted" };
+    request.session = { userId: "an-account-that-was-deleted", sessionVersion: 0 };
   });
 
   async function snapshot() {

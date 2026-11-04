@@ -84,7 +84,7 @@ Every application can carry a follow-up date, the day you want to ask how things
 
 The job is idempotent. It claims a user's due follow-ups in one `UPDATE` that only matches rows whose `reminderSentAt` is still empty, and only then sends the mail. A second run finds nothing left to claim, whether it comes a minute later or at the same moment, so a retry, a double-triggered cron or a redeploy mid-run cannot produce a second mail. A failed send gives the claim back for the next run, and a new follow-up date makes the application due for a new reminder.
 
-Mail only goes to addresses someone has proven to own. GitHub proves it for the accounts it creates, the confirmation link from sign-up does it for password accounts. The job is a Route Handler at `/api/cron/reminders`, triggered by Vercel Cron every day at 05:00 UTC and protected by `CRON_SECRET`. Locally every mail lands in Mailpit, a test inbox at `http://localhost:8025`. In production it goes out through Resend.
+Mail only goes to addresses someone has proven to own. GitHub proves it for the accounts it creates, the confirmation link from sign-up does it for password accounts, and so does a password reset, whose link arrives by mail. The job is a Route Handler at `/api/cron/reminders`, triggered by Vercel Cron every day at 05:00 UTC and protected by `CRON_SECRET`. Locally every mail lands in Mailpit, a test inbox at `http://localhost:8025`. In production it goes out through Resend.
 
 ### Analytics dashboard
 
@@ -108,9 +108,11 @@ The OAuth flow is written out rather than pulled from a library. It uses the aut
 
 Sign-up confirms the address. A new account gets a mail with a link that works for a day and only once, and the database keeps nothing but a SHA-256 hash of its token. The link opens a page with a button, and only the button confirms. Mail scanners open links on their own, and confirming on the first visit would let one of them confirm an address whose owner never clicked anything. Until then the account works as usual, the dashboard asks for the confirmation and can send a new link, three an hour at most, and reminder mails wait. Accounts created through GitHub count as confirmed from the start.
 
-Sign-in and sign-up are rate limited in Redis, with a sliding window kept in a sorted set and updated by one Lua script. Five wrong passwords lock an account for fifteen minutes, counted for addresses that do not exist as well, so a lock reveals nothing. Twenty attempts from one network address within fifteen minutes stop that address. Sign-up allows five new accounts per address and hour, and a taken email counts too, so sign-up cannot be used to test addresses quickly either. Redis only ever sees SHA-256 digests of the emails and addresses it counts.
+A forgotten password is reset by mail. "Forgot your password?" on the sign-in page asks for an address and gives the same answer whether an account has it or not, and the mail only goes out after that answer, so the response time does not tell either. The link is made and stored like the confirmation link, but it lasts an hour instead of a day, because it opens the whole account. Opening it shows a form and changes nothing. Saving a new password confirms the address, since the link came by mail, and signs out every device that was signed in. Then the new password is used to sign in the usual way. An account that so far only signed in through GitHub can set a password the same way, the link proves the address just as GitHub did. This is also how an address goes back to its owner when someone else registered it first. Sign-up refuses a taken address, so the owner asks for a reset link, which only the owner's inbox receives, and whoever registered the address loses the password and every session at once.
 
-Who is making a request is decided in one place. The session token only proves an identity, and `requireUser()` loads the account from the database on every request. A deleted account is signed out at once, and a changed role takes effect with the next click instead of when the week-long token runs out. Every signed-in page and every Server Action goes through that guard, and a test finds every page by its file name, so a page added later without the guard fails CI.
+Sign-in and sign-up are rate limited in Redis, with a sliding window kept in a sorted set and updated by one Lua script. Five wrong passwords lock an account for fifteen minutes, counted for addresses that do not exist as well, so a lock reveals nothing. Twenty attempts from one network address within fifteen minutes stop that address. Sign-up allows five new accounts per address and hour, and a taken email counts too, so sign-up cannot be used to test addresses quickly either. Reset links are limited to three an hour per email, again counted for addresses without an account, and to ten requests an hour per network address, so nobody can fill a stranger's inbox. Redis only ever sees SHA-256 digests of the emails and addresses it counts.
+
+Who is making a request is decided in one place. The session token only proves an identity, and `requireUser()` loads the account from the database on every request. A deleted account is signed out at once, so is every session from before a password reset, and a changed role takes effect with the next click instead of when the week-long token runs out. Every signed-in page and every Server Action goes through that guard, and a test finds every page by its file name, so a page added later without the guard fails CI.
 
 Ownership is enforced server-side today. A user sees and edits only their own applications. Every read and every delete carries the user id in its `where` clause, and updates and status moves first load the row with that same scoped query and only write when it was found. Hiding a button in the UI is treated as cosmetics rather than as a security control.
 
@@ -173,9 +175,9 @@ flowchart TB
     API --> RES
 ```
 
-Reads happen in Server Components and never reach the client as raw queries. Mutations on applications go through Server Actions, which are the single place where authorization, validation and the transition rules are enforced. The one write outside them is the GitHub callback, which creates or links the user. Route Handlers exist only for the cases that need a real HTTP endpoint. That is the GitHub OAuth start and callback, the route that ends the session of a deleted account, and the trigger for the reminder job.
+Reads happen in Server Components and never reach the client as raw queries. Mutations on applications go through Server Actions, which are the single place where authorization, validation and the transition rules are enforced. The one write outside them is the GitHub callback, which creates or links the user. Route Handlers exist only for the cases that need a real HTTP endpoint. That is the GitHub OAuth start and callback, the route that clears the cookie of a session that has ended, because its account was deleted or a password reset signed out every device, and the trigger for the reminder job.
 
-The proxy (Next.js 16 renamed middleware to proxy) is only the first check. The layout for signed-in pages checks again, every page checks once more itself, and every Server Action that touches applications checks before it writes anything. All of them use the same guard, which also asks the database whether the account still exists. A guard that gets skipped in one place is still enforced in the next.
+The proxy (Next.js 16 renamed middleware to proxy) is only the first check. The layout for signed-in pages checks again, every page checks once more itself, and every Server Action that touches applications checks before it writes anything. All of them use the same guard, which also asks the database whether the account still exists and whether the session still counts. A guard that gets skipped in one place is still enforced in the next.
 
 ---
 
@@ -186,6 +188,7 @@ erDiagram
     User ||--o{ Application : owns
     User ||--o{ Account : "has oauth"
     User ||--o{ EmailConfirmation : "waits for"
+    User ||--o{ PasswordReset : "waits for"
     Application ||--o{ StatusEvent : "has history"
     Application ||--o{ Contact : "has"
     Application }o--|| Company : "applies to"
@@ -195,6 +198,7 @@ erDiagram
         string email UK
         string passwordHash "nullable, oauth-only users have none"
         datetime emailVerifiedAt "null until the owner of the address is proven"
+        int sessionVersion "raised by a password reset, ends older sessions"
         Role role "USER | ADMIN"
         datetime createdAt
     }
@@ -209,6 +213,12 @@ erDiagram
         string userId FK
         string tokenHash UK "SHA-256, the token only travels in the mail"
         datetime expiresAt
+    }
+    PasswordReset {
+        string id PK
+        string userId FK
+        string tokenHash UK "SHA-256, like EmailConfirmation"
+        datetime expiresAt "an hour after it was sent"
     }
     Company {
         string id PK
@@ -295,12 +305,12 @@ curl -H "Authorization: Bearer <your CRON_SECRET>" http://localhost:3000/api/cro
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `JWT_SECRET` | Signing secret for session tokens, at least 32 characters |
-| `NEXT_PUBLIC_APP_URL` | Public base URL, used for the OAuth callback and the links in reminder mails |
+| `NEXT_PUBLIC_APP_URL` | Public base URL, used for the OAuth callback and the links in mails |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth credentials |
 | `REDIS_URL` | Redis for the rate limits and the analytics cache. Without it the limits switch themselves off and the analytics are read straight from Postgres |
-| `MAIL_FROM` | Sender address of the reminder mails |
+| `MAIL_FROM` | Sender address of every mail the app sends, reminders, confirmation and reset links |
 | `MAILPIT_URL` | The local test inbox from `docker-compose.yml`, used while `RESEND_API_KEY` is empty |
-| `RESEND_API_KEY` | Sends the reminder mails through Resend. Leave it empty locally, then they go to Mailpit |
+| `RESEND_API_KEY` | Sends the mails through Resend. Leave it empty locally, then they go to Mailpit |
 | `CRON_SECRET` | Protects the reminder job. Vercel Cron sends it as a bearer token, and without it the job refuses to run |
 
 For GitHub sign-in, create an OAuth app at github.com/settings/developers with the callback `http://localhost:3000/api/auth/github/callback` and put its two keys into `.env`. Email and password sign-in works without it.
@@ -383,7 +393,7 @@ src/
   app/
     page.tsx              landing page
     confirm-email/        the page a confirmation link opens, the button confirms
-    (auth)/               sign-in and sign-up pages, form actions, OAuth buttons
+    (auth)/               sign-in, sign-up, forgot and reset password pages, form actions, OAuth buttons
     (app)/                everything behind a session, the layout checks it again
       admin/              platform numbers for admins, no content of any account
       dashboard/          counts and shortcuts
@@ -392,7 +402,7 @@ src/
         board/            Kanban board with drag and drop
     api/auth/
       github/             OAuth start, callback/ handles the way back
-      session-ended/      clears the cookie of an account that no longer exists
+      session-ended/      clears the cookie of a session that ended, account deleted or password reset
     api/cron/reminders/   the daily reminder job, protected by CRON_SECRET
   components/             status badge, delete button
   generated/prisma/       Prisma client, generated and gitignored
@@ -403,16 +413,18 @@ src/
     analytics/            the SQL behind the analytics page, cached per user, with integration tests
     confirmation/         confirmation links, hashed, single use, a day long
     mail/                 sends a mail through Mailpit locally or Resend in production, HTML escaping
+    password-reset/       reset links, hashed, single use, an hour long, and the actions behind both pages
     pipeline/             transition rules, the state machine
     reminders/            the reminder job and the mail it sends
     validation/           Zod schemas, parsed in the Server Actions
     cache.ts              per-user cache in Redis with versioned keys
     db.ts                 Prisma client singleton
     format.ts             date formats with an explicit time zone
-    rate-limit.ts         sliding-window limits for sign-in and sign-up
+    link-token.ts         the token in a mail link, random, stored only as a hash
+    rate-limit.ts         sliding-window limits for sign-in, sign-up and the mails
     redis.ts              one Redis connection per process
     request.ts            the client address the rate limits count
-  test/                   database, Redis and Mailpit helpers, and the global setup for the integration tests
+  test/                   database, Redis, Mailpit and render helpers, and the global setup for the integration tests
   proxy.ts                route guard, the Next.js 16 name for middleware
 prisma/
   schema.prisma
@@ -457,14 +469,15 @@ Things worth writing down as I go, filled in milestone by milestone.
 
 - **Why ownership lives in the `where` clause and not in an `if`.** Every read takes a user id and puts it into the query, so an application belonging to someone else is never loaded rather than loaded and rejected. Deleting uses `deleteMany` with the same where clause. `delete` would accept the user id as well, but it throws when nothing matches, while `deleteMany` simply affects zero rows, so a foreign id gets exactly the same answer as a missing one
 - **Why M03 ships with one OAuth provider instead of two.** The plan said Google and GitHub. GitHub is done, and adding Google would have meant a second set of credentials on top of a flow that is already written and understood. The interesting part of OAuth is the flow itself, not repeating it, so the scope was cut on purpose rather than left half finished
-- **Why GitHub sign-in never links onto a password account.** GitHub confirms that an address is verified, sign-up here does not, because it sends no confirmation mail. A password account therefore proves nothing about who owns its address, and anyone could register a stranger's address first. Linking GitHub onto such an account by email would put the real owner into an account whose password someone else knows. So GitHub only links onto accounts without a password, which only GitHub sign-in creates, and everyone else signs in with their password. Removing the password while linking would not have helped, because sessions are signed JWTs without a session table, and a session that is already open stays valid until it expires. Sign-up confirms addresses now, so linking onto a confirmed password account would be safe. The rule has not been loosened yet
+- **Why GitHub sign-in never links onto a password account.** When this rule was written, GitHub confirmed that an address is verified and sign-up here did not, because it sent no confirmation mail. A password account therefore proved nothing about who owns its address, and anyone could register a stranger's address first. Linking GitHub onto such an account by email would put the real owner into an account whose password someone else knows. So GitHub only links onto accounts without a password, which only GitHub sign-in creates, and everyone else signs in with their password. Removing the password while linking would not have helped either, because a session that was already open could not be ended before it expired. Both reasons are gone by now. Sign-up confirms addresses, and a password reset ends every session of an account, see below. Linking onto a confirmed password account would be safe, the rule has not been loosened yet
 - **Why the rate limits count addresses that do not exist, and let requests through when Redis is down.** A lock that only ever hit real accounts would tell an attacker which addresses are registered, the same leak the uniform error message avoids, so failed sign-ins count for any address. Being locked out of every login whenever Redis has a bad minute would be an outage of its own, so a missing or silent Redis lets the request through, and the cost of Argon2id still keeps each guess slow. The client never queues a command while it is disconnected and gives every command half a second, so a broken Redis cannot make a sign-in hang either
 - **What changed when the analytics moved behind a cache.** Less than the word suggests, and that is the honest part. With a few dozen applications the five queries take milliseconds, so nobody would notice the cache. It is here to build the pattern once, and its hard part is invalidation, not storage. Every user has a version number in Redis, and each cached answer carries the version it was computed under in its key. A write bumps the version once it has committed, which makes every older answer unreachable at once. Deleting the entry instead would leave a gap. A page view that read the old data just before the write could store its result right after the delete, and the old numbers would be back until they expire. With versions that late result lands under the old number, where nobody looks. Bumping before the commit would open the same gap from the other side. Both moments are held open in tests, and each test fails as soon as its rule is taken out. The plan said to invalidate when a `StatusEvent` is written, but the source, the date sent and the role feed the numbers too, so every save and every deletion invalidates. Entries still expire after five minutes, because two answers depend on the clock and because an invalidation lost to a Redis hiccup should not leave wrong numbers behind for long. Without Redis the page reads straight from Postgres
 - **How the security rules are tested.** The rules that keep data safe run as integration tests against Postgres. A stranger's application cannot be edited, deleted or moved, GitHub never links onto an account with a password, a wrong password and an unknown address get the same answer, and `next` cannot lead off the site. Each of these tests was checked by deleting the rule it guards and watching exactly that test fail. The race between two tabs needed more than that. Two requests in a test rarely overlap, because the second one is still opening its connection when the first has finished, so a test that simply fires both passes even without the guard. A third connection now locks the row, both requests read the same status and queue up behind the lock, and only then is it released. With the status in the `where` clause one write wins every time, without it both get through every time
 - **Why the token carries no role, and what happens to a deleted account.** The session is a signed JWT that stays valid for a week, and whatever is written into it stays true for that week. A role in the token would let a demoted admin keep the role until it runs out. So the token only says who someone is, and `requireUser()` in `src/lib/auth/guard.ts` reads the account and its role from the database on every request. That is one lookup by primary key, and React's `cache()` lets the layout, the page and `generateMetadata` share it. The same lookup notices a deleted account, which used to end in a loop. The dashboard sent a session without an account to the sign-in page, and the proxy, which only checks the signature, sent the still valid token straight back to the dashboard. Pages cannot change cookies, so the guard now sends such a session to a small Route Handler that clears the cookie, and only when the account is really gone, so a link to it cannot sign anyone out. Tests cover every action and every page, the pages found by file name, and each test fails as soon as its guard is replaced by a check of the token alone
-- **Why an admin sees numbers and not applications, and why roles come from a script.** Least privilege. Running a platform takes knowing how it is used, not reading anyone's job search, so the admin page only gets counts and statuses, and the type it receives has no field that could carry an email or a company. A test plants such content and fails if any of it reaches the page. The role opens the admin page and nothing else. Every query for applications keeps its user id for admins too, and the tests for a stranger's application run once as a user and once as an admin. Roles change only through `npm run user:role`, because a role that the app can write is a role that a bug in the app can hand out. A list of admin emails in an environment variable was the other option, but sign-up does not confirm addresses yet, so anyone could register such an address first. One honest limit remains. With three accounts the counts are not anonymous, a single GitHub account is a person. A platform with real users would hide small numbers, this one does not yet
+- **Why an admin sees numbers and not applications, and why roles come from a script.** Least privilege. Running a platform takes knowing how it is used, not reading anyone's job search, so the admin page only gets counts and statuses, and the type it receives has no field that could carry an email or a company. A test plants such content and fails if any of it reaches the page. The role opens the admin page and nothing else. Every query for applications keeps its user id for admins too, and the tests for a stranger's application run once as a user and once as an admin. Roles change only through `npm run user:role`, because a role that the app can write is a role that a bug in the app can hand out. A list of admin emails in an environment variable was the other option, but sign-up did not confirm addresses back then, so anyone could have registered such an address first. One honest limit remains. With three accounts the counts are not anonymous, a single GitHub account is a person. A platform with real users would hide small numbers, this one does not yet
 - **Why the pipeline lives in one module.** Every legal move is listed exactly once, in `src/lib/pipeline/transitions.ts`. The edit form, the status buttons on the detail page and the Kanban board all ask that module which moves to offer, and the Server Actions ask it again before anything is written, because a status posted by a browser is just a string until the server has checked it. The table is typed with `satisfies Record<Status, readonly Status[]>`, so adding a status to the Prisma enum without deciding where it may go breaks the build. Spreading the rules across the UI would have meant three places that can disagree, and the board would have been the first to drift
 - **How `reminderSentAt` keeps the reminder job from sending a mail twice.** The job claims a user's due follow-ups in one `UPDATE` that only matches rows whose `reminderSentAt` is still empty, and sends the mail only after that. A second run finds nothing left, whether it comes a minute later or at the same moment, because Postgres makes the second of two simultaneous updates wait for the first and then checks the condition again. Two tests prove it. One runs the job twice in a row. The other holds the first run in the middle of sending while a second run starts. Sending first and marking after passes the first test and fails the second, which is why the second one exists. The price is that a reminder goes out at most once. A failed send gives the claim back for the next run, and only a crash in the moment between claim and send loses one. Mail only goes to confirmed addresses, through GitHub or the confirmation link, and the template is a function rather than a React component, because `react-dom/server` refuses to load in the server layer that Route Handlers run in. Building it surfaced an older bug. An emptied field in the edit form arrived as `undefined`, which Prisma reads as "leave it alone", so a cleared follow-up date, note, link or salary kept its old value
+- **How a password reset takes an account back.** Sign-up refuses an address that already has an account, so whoever registered a stranger's address first used to keep it, and its owner had no way in. A reset link goes to the address, which hands the account to whoever reads that inbox. That alone would not have been enough, because sessions are signed JWTs that stay valid for a week, and the stranger's session would have outlived the new password. So every token now carries the account's `sessionVersion` from the moment it was signed. A reset raises that number in the same transaction that saves the password, and the guard looks the account up by its id and the version together, so a token from before finds no account, the same answer as for a deleted one. It works like changing a lock, every key cut before stops fitting at once. A version and not a timestamp, because the issue time of a JWT only has whole seconds, and a sign-in right after a reset could land in the same second as the reset. Tokens from before the change carry no version and count as the first generation, so the deploy signs nobody out. The request for a link answers the same for every address and sends the mail through `after()`, once the response is on its way, because writing the link and talking to the mail provider take long enough to measure. Nobody is signed in automatically after a reset, the new password is used the usual way, as the OWASP Forgot Password Cheat Sheet advises. One integration test tells the whole story, from the stranger's sign-up to the owner's sign-in, and it fails as soon as the version check or the raise is taken out. One thing stays as it was. Whatever the stranger typed into the account is still there after the takeover, and the owner can delete it. Deleting it on the way would also wipe the applications of a real user who never confirmed the address and only forgot the password
 
 ---
 

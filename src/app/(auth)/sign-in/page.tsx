@@ -24,7 +24,7 @@ const OAUTH_ERRORS: Record<string, string> = {
 };
 
 export default async function SignInPage({ searchParams }: PageProps<"/sign-in">) {
-  const { error, next } = await searchParams;
+  const { error, next, reset } = await searchParams;
   const message = typeof error === "string" ? OAUTH_ERRORS[error] : undefined;
 
   // The page the proxy turned the visitor away from. It only travels on from
@@ -50,6 +50,18 @@ export default async function SignInPage({ searchParams }: PageProps<"/sign-in">
           role="alert"
         >
           {message}
+        </p>
+      )}
+
+      {/* Where a password reset ends. Anyone can open this address with
+          ?reset=1, and all it does is show a sentence. */}
+      {reset === "1" && (
+        <p
+          className="rounded-md border border-emerald-600/30 bg-emerald-600/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
+          role="status"
+        >
+          Your new password is saved, and every device that was signed in is signed out. Sign in
+          with the new password.
         </p>
       )}
 

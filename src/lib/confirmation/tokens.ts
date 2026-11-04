@@ -1,31 +1,27 @@
-import { createHash, randomBytes } from "node:crypto";
 import { prisma } from "@/lib/db";
+import { hashLinkToken, linkUrl, newLinkToken } from "@/lib/link-token";
 import { sendMail } from "@/lib/mail/send";
 import { confirmationMail } from "./mail";
 
 /**
- * Links that prove someone owns an address. The token is 32 random bytes, it
- * only ever travels in the mail, and the database keeps nothing but its
- * SHA-256 hash. A link works for a day and only once, and asking for a new
- * one makes every older link of the account stop working.
+ * Links that prove someone owns an address. The token is made and stored the
+ * way src/lib/link-token.ts describes, only as a hash. A link works for a day
+ * and only once, and asking for a new one makes every older link of the
+ * account stop working.
  */
 
 const LINK_TTL_MS = 24 * 60 * 60 * 1000;
 
-function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
 /** A fresh link for the account, replacing any earlier one. Returns the token for the mail. */
 export async function issueConfirmation(userId: string, now = new Date()): Promise<string> {
-  const token = randomBytes(32).toString("base64url");
+  const token = newLinkToken();
 
   await prisma.$transaction([
     prisma.emailConfirmation.deleteMany({ where: { userId } }),
     prisma.emailConfirmation.create({
       data: {
         userId,
-        tokenHash: hashToken(token),
+        tokenHash: hashLinkToken(token),
         expiresAt: new Date(now.getTime() + LINK_TTL_MS),
       },
     }),
@@ -40,10 +36,8 @@ export async function sendConfirmation(
   now = new Date(),
 ): Promise<void> {
   const token = await issueConfirmation(user.id, now);
-  const url = new URL("/confirm-email", process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000");
-  url.searchParams.set("token", token);
 
-  await sendMail(confirmationMail(user.email, url.toString()));
+  await sendMail(confirmationMail(user.email, linkUrl("/confirm-email", token)));
 }
 
 /**
@@ -55,7 +49,7 @@ export async function pendingConfirmation(
   now = new Date(),
 ): Promise<{ email: string } | null> {
   const row = await prisma.emailConfirmation.findUnique({
-    where: { tokenHash: hashToken(token) },
+    where: { tokenHash: hashLinkToken(token) },
     select: { expiresAt: true, user: { select: { email: true } } },
   });
 
@@ -67,7 +61,7 @@ export async function pendingConfirmation(
  * unknown, used or expired.
  */
 export async function confirmEmail(token: string, now = new Date()): Promise<boolean> {
-  const tokenHash = hashToken(token);
+  const tokenHash = hashLinkToken(token);
 
   return prisma.$transaction(async (tx) => {
     const row = await tx.emailConfirmation.findUnique({

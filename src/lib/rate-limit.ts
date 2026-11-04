@@ -54,6 +54,24 @@ export const CONFIRMATION_MAILS_PER_ACCOUNT: Limit = {
   windowMs: 60 * MINUTE,
 };
 
+/** Requests for a reset link from one address, for any accounts. */
+export const PASSWORD_RESETS_PER_ADDRESS: Limit = {
+  name: "password-reset:address",
+  max: 10,
+  windowMs: 60 * MINUTE,
+};
+
+/**
+ * Requests for a reset link for one email, whether or not an account has it.
+ * Every request can put a mail into someone's inbox, and this caps how many a
+ * stranger can send there, from any number of addresses.
+ */
+export const PASSWORD_RESETS_PER_ACCOUNT: Limit = {
+  name: "password-reset:account",
+  max: 3,
+  windowMs: 60 * MINUTE,
+};
+
 export type Verdict = { allowed: true } | { allowed: false; retryAfterMs: number };
 
 /**

@@ -54,7 +54,7 @@ describe.each(files)("%s", (file) => {
 
   it("sends a session whose account is gone to have its cookie cleared", async () => {
     // A token that is still valid, for an account that no longer exists.
-    request.session = { userId: "an-account-that-was-deleted" };
+    request.session = { userId: "an-account-that-was-deleted", sessionVersion: 0 };
 
     expect(await redirectTarget(render(file))).toBe(SESSION_ENDED_PATH);
   });

@@ -18,7 +18,7 @@ let me: string;
 beforeEach(async () => {
   await resetDatabase();
   me = (await createUser("me@example.com")).id;
-  request.session = { userId: me };
+  request.session = { userId: me, sessionVersion: 0 };
 });
 
 afterAll(async () => {
@@ -56,6 +56,21 @@ describe("requireUser", () => {
 
     expect(await redirectTarget(requireUser())).toBe(SESSION_ENDED_PATH);
   });
+
+  it("ends a session from before a password reset with the very next request", async () => {
+    expect((await requireUser()).id).toBe(me);
+
+    await prisma.user.update({ where: { id: me }, data: { sessionVersion: { increment: 1 } } });
+
+    expect(await redirectTarget(requireUser())).toBe(SESSION_ENDED_PATH);
+  });
+
+  it("lets a session of the current generation through", async () => {
+    await prisma.user.update({ where: { id: me }, data: { sessionVersion: 3 } });
+    request.session = { userId: me, sessionVersion: 3 };
+
+    expect((await requireUser()).id).toBe(me);
+  });
 });
 
 describe("requireAdmin", () => {
@@ -85,7 +100,7 @@ describe("requireAdmin", () => {
     request.session = null;
     expect(await redirectTarget(requireAdmin())).toBe("/sign-in");
 
-    request.session = { userId: "an-account-that-was-deleted" };
+    request.session = { userId: "an-account-that-was-deleted", sessionVersion: 0 };
     expect(await redirectTarget(requireAdmin())).toBe(SESSION_ENDED_PATH);
   });
 });
@@ -96,7 +111,7 @@ describe("currentUser", () => {
     expect(await currentUser()).toBeNull();
 
     await prisma.user.delete({ where: { id: me } });
-    request.session = { userId: me };
+    request.session = { userId: me, sessionVersion: 0 };
     expect(await currentUser()).toBeNull();
   });
 });

@@ -1,18 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
+import { FieldError } from "../field-error";
 import { signIn, type SignInState } from "./actions";
 
 const initialState: SignInState = {};
-
-function FieldError({ messages }: { messages?: string[] }) {
-  if (!messages?.length) return null;
-  return (
-    <p className="text-sm text-red-600 dark:text-red-400" role="alert">
-      {messages[0]}
-    </p>
-  );
-}
 
 export function SignInForm({ next }: { next: string }) {
   const [state, formAction, isPending] = useActionState(signIn, initialState);
@@ -68,6 +61,14 @@ export function SignInForm({ next }: { next: string }) {
       >
         {isPending ? "Signing in..." : "Sign in"}
       </button>
+
+      {/* After the button, so the tab key goes from the password straight to it. */}
+      <Link
+        href="/forgot-password"
+        className="self-start text-sm text-zinc-600 underline underline-offset-4 dark:text-zinc-400"
+      >
+        Forgot your password?
+      </Link>
     </form>
   );
 }

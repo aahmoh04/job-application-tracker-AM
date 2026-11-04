@@ -19,7 +19,7 @@ let me: string;
 beforeEach(async () => {
   await resetDatabase();
   me = (await createUser("me@example.com")).id;
-  request.session = { userId: me };
+  request.session = { userId: me, sessionVersion: 0 };
 });
 
 afterAll(async () => {
