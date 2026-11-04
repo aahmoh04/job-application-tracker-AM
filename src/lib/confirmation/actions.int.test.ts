@@ -24,7 +24,7 @@ beforeEach(async () => {
   await Promise.all([resetDatabase(), resetRedis()]);
   address = freshAddress("resend");
   me = (await createUser(address)).id;
-  request.session = { userId: me };
+  request.session = { userId: me, sessionVersion: 0 };
 });
 
 afterAll(async () => {

@@ -134,6 +134,24 @@ describe("the GitHub callback", () => {
     expect(await prisma.account.count()).toBe(1);
   });
 
+  it("signs the session with the account's current generation, after a password reset as well", async () => {
+    fakeGitHub();
+    const existing = await prisma.user.create({
+      data: {
+        email: GITHUB_EMAIL,
+        sessionVersion: 2,
+        accounts: { create: { provider: "github", providerAccountId: String(GITHUB_ID) } },
+      },
+    });
+
+    await GET(callback());
+
+    expect(await verifySessionToken(jar.token ?? "")).toEqual({
+      userId: existing.id,
+      sessionVersion: 2,
+    });
+  });
+
   it("links onto an existing account that has no password", async () => {
     fakeGitHub();
     const existing = await prisma.user.create({

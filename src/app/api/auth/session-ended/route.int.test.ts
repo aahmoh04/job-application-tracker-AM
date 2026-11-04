@@ -30,7 +30,7 @@ afterAll(async () => {
 
 describe("the session-ended route", () => {
   it("clears the cookie of an account that is gone and sends the visitor to sign in", async () => {
-    const token = await createSessionToken({ userId: me });
+    const token = await createSessionToken({ userId: me, sessionVersion: 0 });
     await prisma.user.delete({ where: { id: me } });
 
     const response = await GET(requestWith(token));
@@ -39,8 +39,18 @@ describe("the session-ended route", () => {
     expect(sessionCookie(response)).toMatch(/Expires=Thu, 01 Jan 1970/);
   });
 
+  it("clears the cookie of a session that a password reset ended", async () => {
+    const token = await createSessionToken({ userId: me, sessionVersion: 0 });
+    await prisma.user.update({ where: { id: me }, data: { sessionVersion: 1 } });
+
+    const response = await GET(requestWith(token));
+
+    expect(response.headers.get("location")).toBe("http://localhost:3000/sign-in");
+    expect(sessionCookie(response)).toMatch(/Expires=Thu, 01 Jan 1970/);
+  });
+
   it("leaves a living account signed in, so a link here signs nobody out", async () => {
-    const token = await createSessionToken({ userId: me });
+    const token = await createSessionToken({ userId: me, sessionVersion: 0 });
 
     const response = await GET(requestWith(token));
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { OAuthButtons } from "../oauth-buttons";
 import { SignUpForm } from "./sign-up-form";
 
@@ -12,7 +13,11 @@ export default function SignUpPage() {
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Create an account</h1>
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Start tracking your applications in one place.
+          Start tracking your applications in one place. Already have an account?{" "}
+          <Link href="/sign-in" className="underline underline-offset-4">
+            Sign in
+          </Link>
+          .
         </p>
       </div>
       <SignUpForm />

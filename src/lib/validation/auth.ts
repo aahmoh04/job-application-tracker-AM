@@ -23,16 +23,25 @@ const password = z
   .min(12, "Use at least 12 characters.")
   .max(128, "That is longer than 128 characters.");
 
+// The same rules wherever a password is chosen, at sign-up and after a reset.
+const newPassword = { password, confirmPassword: z.string() };
+
+function samePasswords(data: { password: string; confirmPassword: string }): boolean {
+  return data.password === data.confirmPassword;
+}
+
+const SAME_PASSWORDS = {
+  message: "The two passwords do not match.",
+  path: ["confirmPassword"],
+};
+
 export const signUpSchema = z
-  .object({
-    email: emailSchema,
-    password,
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "The two passwords do not match.",
-    path: ["confirmPassword"],
-  });
+  .object({ email: emailSchema, ...newPassword })
+  .refine(samePasswords, SAME_PASSWORDS);
+
+export const passwordResetRequestSchema = z.object({ email: emailSchema });
+
+export const newPasswordSchema = z.object(newPassword).refine(samePasswords, SAME_PASSWORDS);
 
 // Sign-in deliberately only checks that something was typed. Applying the
 // sign-up rules here would tell an attacker what the rules are, and would lock

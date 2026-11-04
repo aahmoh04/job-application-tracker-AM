@@ -1,18 +1,10 @@
 "use client";
 
 import { useActionState } from "react";
+import { FieldError } from "../field-error";
 import { signUp, type SignUpState } from "./actions";
 
 const initialState: SignUpState = {};
-
-function FieldError({ messages }: { messages?: string[] }) {
-  if (!messages?.length) return null;
-  return (
-    <p className="text-sm text-red-600 dark:text-red-400" role="alert">
-      {messages[0]}
-    </p>
-  );
-}
 
 export function SignUpForm() {
   const [state, formAction, isPending] = useActionState(signUp, initialState);

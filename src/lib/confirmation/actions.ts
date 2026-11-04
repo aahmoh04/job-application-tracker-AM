@@ -1,22 +1,19 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { requireUser } from "@/lib/auth/guard";
+import { linkTokenSchema } from "@/lib/link-token";
 import { CONFIRMATION_MAILS_PER_ACCOUNT, hit, retryMessage } from "@/lib/rate-limit";
 import { confirmEmail, sendConfirmation } from "./tokens";
-
-// The token reaches the action through bind, and React writes bound arguments
-// into the page as a hidden field. It is client input like any other, see the
-// note in lib/applications/actions.ts.
-const tokenSchema = z.string().min(1).max(200);
 
 /**
  * The button on the page a confirmation link opens. Only this click confirms.
  * Opening the link does not, because mail scanners open links on their own.
+ * The token arrives through bind, which React writes into the page as a
+ * hidden field, so it is parsed like any other input.
  */
 export async function confirmEmailAction(token: unknown): Promise<void> {
-  const parsed = tokenSchema.safeParse(token);
+  const parsed = linkTokenSchema.safeParse(token);
   const confirmed = parsed.success && (await confirmEmail(parsed.data));
 
   // A used or expired link lands back on the page, which then says so.

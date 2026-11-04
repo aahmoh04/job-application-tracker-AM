@@ -53,7 +53,10 @@ describe("signUp", () => {
     expect(target).toBe("/dashboard");
     expect(user.passwordHash).toMatch(/^\$argon2id\$/);
     expect(user.passwordHash).not.toContain(PASSWORD);
-    expect(await verifySessionToken(jar.token ?? "")).toEqual({ userId: user.id });
+    expect(await verifySessionToken(jar.token ?? "")).toEqual({
+      userId: user.id,
+      sessionVersion: 0,
+    });
   });
 
   it("mails a confirmation link to the new address, which starts unconfirmed", async () => {
@@ -82,7 +85,9 @@ describe("signUp", () => {
     );
 
     expect(result).toEqual({
-      errors: { email: ["An account with this email already exists."] },
+      errors: {
+        email: ["An account with this email already exists. If it is yours, reset its password."],
+      },
       values: { email: "Taken@Example.com" },
     });
     expect(await prisma.user.count()).toBe(1);

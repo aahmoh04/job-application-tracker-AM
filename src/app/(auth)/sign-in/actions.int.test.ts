@@ -53,7 +53,15 @@ describe("signIn", () => {
     );
 
     expect(target).toBe("/applications/board");
-    expect(await verifySessionToken(jar.token ?? "")).toEqual({ userId });
+    expect(await verifySessionToken(jar.token ?? "")).toEqual({ userId, sessionVersion: 0 });
+  });
+
+  it("signs the session with the account's current generation, so it works after a reset", async () => {
+    await prisma.user.update({ where: { id: userId }, data: { sessionVersion: 4 } });
+
+    await redirectTarget(signIn({}, form({ email: "me@example.com", password: PASSWORD })));
+
+    expect(await verifySessionToken(jar.token ?? "")).toEqual({ userId, sessionVersion: 4 });
   });
 
   it("goes to the dashboard when next points somewhere else", async () => {

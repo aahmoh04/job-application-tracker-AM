@@ -10,6 +10,12 @@ import { SignJWT, jwtVerify } from "jose";
  * written into it would stay there for the week the token is valid, so an
  * admin who loses the role would keep it until then. The role is read from
  * the database on every request instead, see src/lib/auth/guard.ts.
+ *
+ * Next to the id it carries the account's session version from the moment it
+ * was signed. That is no permission, it says which generation of sessions the
+ * token belongs to. A password reset starts a new generation, and the guard
+ * turns away every token from an older one, like a new lock that no old key
+ * fits anymore.
  */
 
 export const SESSION_COOKIE_NAME = "session";
@@ -17,6 +23,8 @@ export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // one week
 
 export type SessionPayload = {
   userId: string;
+  /** User.sessionVersion when the session started. */
+  sessionVersion: number;
 };
 
 function getSecretKey(): Uint8Array {
@@ -33,7 +41,7 @@ function getSecretKey(): Uint8Array {
 }
 
 export async function createSessionToken(session: SessionPayload): Promise<string> {
-  return new SignJWT({})
+  return new SignJWT({ sessionVersion: session.sessionVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(session.userId)
     .setIssuedAt()
@@ -50,13 +58,22 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   try {
     const { payload } = await jwtVerify(token, getSecretKey(), { algorithms: ["HS256"] });
 
-    if (typeof payload.sub !== "string") {
+    // Tokens signed before there were session versions carry none. They
+    // belong to the first generation, version 0, which every account starts
+    // in, so the first password reset ends them as well.
+    const sessionVersion = payload.sessionVersion ?? 0;
+
+    if (
+      typeof payload.sub !== "string" ||
+      typeof sessionVersion !== "number" ||
+      !Number.isInteger(sessionVersion)
+    ) {
       return null;
     }
 
     // Tokens from before the role moved out still carry one. Like everything
-    // else in the payload besides the subject, it is ignored.
-    return { userId: payload.sub };
+    // else in the payload besides the subject and the version, it is ignored.
+    return { userId: payload.sub, sessionVersion };
   } catch {
     return null;
   }
