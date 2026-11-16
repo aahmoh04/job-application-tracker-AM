@@ -14,7 +14,8 @@ import { getRedis } from "@/lib/redis";
  *
  * If Redis is not configured or does not answer, the request goes through.
  * Locking everyone out whenever Redis has a bad minute would be an outage of
- * its own, and the cost of Argon2id still keeps guessing slow.
+ * its own, and the cost of Argon2id still keeps guessing slow. The one
+ * exception is hitStrict below, for limits that guard a bill.
  */
 
 const MINUTE = 60_000;
@@ -72,6 +73,28 @@ export const PASSWORD_RESETS_PER_ACCOUNT: Limit = {
   windowMs: 60 * MINUTE,
 };
 
+/**
+ * Job postings one account can have read by the model. Everything else an
+ * account does here is free to serve, a read is a model call that can cost
+ * money.
+ */
+export const POSTING_READS_PER_ACCOUNT: Limit = {
+  name: "posting:account",
+  max: 10,
+  windowMs: 60 * MINUTE,
+};
+
+/**
+ * Job postings read for all accounts together in a day. The limit above
+ * bounds what one account can spend, and accounts are free to create. This
+ * one bounds the bill itself, however many accounts there are.
+ */
+export const POSTING_READS_PER_INSTALLATION: Limit = {
+  name: "posting:installation",
+  max: 200,
+  windowMs: 24 * 60 * MINUTE,
+};
+
 export type Verdict = { allowed: true } | { allowed: false; retryAfterMs: number };
 
 /**
@@ -108,17 +131,18 @@ export function keyFor(limit: Limit, subject: string): string {
   return `rate-limit:${limit.name}:${digest}`;
 }
 
+/** The verdict, or null when there is no Redis to ask or it does not answer. */
 async function evaluate(
   limit: Limit,
   subject: string,
   record: boolean,
   now: number,
-): Promise<Verdict> {
+): Promise<Verdict | null> {
   try {
     const redis = await getRedis();
 
     if (!redis) {
-      return { allowed: true };
+      return null;
     }
 
     const reply = (await redis.eval(SLIDING_WINDOW, {
@@ -134,19 +158,34 @@ async function evaluate(
 
     return reply[0] === 1 ? { allowed: true } : { allowed: false, retryAfterMs: reply[1] };
   } catch (error) {
-    console.error("Rate limit unavailable, letting the request through.", error);
-    return { allowed: true };
+    console.error(`Rate limit ${limit.name} could not be checked.`, error);
+    return null;
   }
 }
 
 /** Counts one attempt, unless the limit is already reached. */
-export function hit(limit: Limit, subject: string, now = Date.now()): Promise<Verdict> {
-  return evaluate(limit, subject, true, now);
+export async function hit(limit: Limit, subject: string, now = Date.now()): Promise<Verdict> {
+  return (await evaluate(limit, subject, true, now)) ?? { allowed: true };
 }
 
 /** Looks without counting, for limits that only count failures. */
-export function peek(limit: Limit, subject: string, now = Date.now()): Promise<Verdict> {
-  return evaluate(limit, subject, false, now);
+export async function peek(limit: Limit, subject: string, now = Date.now()): Promise<Verdict> {
+  return (await evaluate(limit, subject, false, now)) ?? { allowed: true };
+}
+
+/**
+ * Counts one attempt like hit, but answers null when the limit cannot be
+ * checked at all. For limits that guard a bill instead of a login. Letting a
+ * sign-in through while Redis is down costs nothing, because Argon2id still
+ * slows every guess. Letting a paid model call through costs money for as
+ * long as Redis stays down, so the caller refuses on null.
+ */
+export function hitStrict(
+  limit: Limit,
+  subject: string,
+  now = Date.now(),
+): Promise<Verdict | null> {
+  return evaluate(limit, subject, true, now);
 }
 
 /** Forgets every counted attempt, for example after a successful sign-in. */

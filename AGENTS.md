@@ -20,6 +20,7 @@ The block above is maintained by `next dev`. Everything below is about this proj
 - `npx prisma db seed` wipes every table before it writes. Never run it against a database whose data matters.
 - `npm run user:role -- <email> <ADMIN|USER>` gives an account a role, against the database in `DATABASE_URL`.
 - Mailpit from `docker compose up -d` shows every mail the app sends locally at http://localhost:8025. The reminder job runs with `curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/reminders`.
+- The reader for job postings is off unless `OLLAMA_URL`, `OLLAMA_MODEL` and `REDIS_URL` are set. No test ever calls a model. `vitest.config.mts` empties both Ollama variables, the tests of the action answer in the model's place, and each reader is tested against a fake `fetch`.
 
 ## Rules the code relies on
 
@@ -39,6 +40,10 @@ The block above is maintained by `next dev`. Everything below is about this proj
 - A redirect target that came from the browser goes through `safeRedirectPath` in `src/lib/auth/redirect.ts`.
 - GitHub sign-in only links onto accounts without a password, see `canLinkByEmail` in `src/lib/auth/oauth/link.ts`.
 - Dates from `<input type="date">` are stored as midnight UTC and shown in UTC, moments are shown in Europe/Berlin. Both formatters live in `src/lib/format.ts`.
+- The answer of a model is input. `suggestFromPosting` in `src/lib/posting/actions.ts` parses it with `extractionSchema` before anything reads it, and `suggestionFrom` checks every field on its own and leaves out what makes no sense. The action saves nothing. A suggestion only fills the form, and the save goes through `createApplication` like one typed by hand.
+- What the model is told and the shape of its answer live together in `src/lib/posting/extraction.ts`, under `EXTRACTION_VERSION`. The rule of a field goes into its `describe()`, and the instructions are built from there, because a local model never sees the schema's descriptions. Change the wording and `extraction.test.ts` fails until the version and the fingerprint in that test are raised.
+- The limits on reading postings go through `hitStrict`, which answers null when Redis cannot be asked, and the action refuses then. Never swap it for `hit`, which would let every read through while Redis is down. The account is counted before the installation, so an account over its limit does not use up what everyone shares.
+- A reader in `src/lib/posting/` returns parsed JSON and throws errors that carry neither the posting nor the answer, because both end up in the log otherwise. The same holds for what the action logs about an answer it threw away, field names and error codes only.
 
 ## Conventions
 
