@@ -24,7 +24,7 @@ const optionalText = z
 const WHOLE_EUROS = /^\d+$|^\d{1,3}([.,\s])\d{3}(?:\1\d{3})*$/;
 
 /** The largest value a Postgres integer holds, the type behind both salary columns. */
-const MAX_INT = 2_147_483_647;
+export const MAX_INT = 2_147_483_647;
 
 /** "45.000" becomes 45000, "" becomes undefined, "45.5" and "abc" become errors. */
 const optionalMoney = z

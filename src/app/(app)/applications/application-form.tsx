@@ -35,7 +35,7 @@ const SOURCE_OPTIONS = [
   { value: "RECRUITER", label: "Recruiter" },
 ];
 
-const inputClass =
+export const inputClass =
   "rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-transparent dark:focus:border-zinc-100";
 
 function FieldError({ messages }: { messages?: string[] }) {

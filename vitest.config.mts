@@ -48,6 +48,9 @@ export default defineConfig({
             // No transport either, so a unit test can never send a mail.
             MAILPIT_URL: "",
             RESEND_API_KEY: "",
+            // And no model, so a unit test can never have a posting read.
+            OLLAMA_URL: "",
+            OLLAMA_MODEL: "",
           },
         },
       },
@@ -71,6 +74,9 @@ export default defineConfig({
             RESEND_API_KEY: "",
             MAIL_FROM: "reminders@jobtracker.test",
             NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+            // No model, whatever .env says. The tests answer in its place.
+            OLLAMA_URL: "",
+            OLLAMA_MODEL: "",
           },
         },
       },

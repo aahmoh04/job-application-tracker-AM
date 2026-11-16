@@ -42,8 +42,11 @@ This project is built in public, one milestone at a time. The checklist is the h
 | 08 | Analytics dashboard | [x] |
 | 09 | Role-based access control | [x] |
 | 10 | Deployment setup and hardening | [x] |
+| + | Reading a job posting with a language model | [~] |
 
 [ ] planned | [~] in progress | [x] done
+
+The last row is the one extra beyond the milestones. It is built and tested, but the model in every test and every trial so far was a stand-in, which is why it does not count as done yet. See [Reading a job posting](#reading-a-job-posting).
 
 ---
 
@@ -100,6 +103,20 @@ Mail only goes to addresses someone has proven to own. GitHub proves it for the 
 
 All five are computed in Postgres with `$queryRaw`, because window functions, percentiles and `FILTER` are beyond Prisma's query API, and every value still goes in as a parameter. Integration tests run them against a real Postgres, see [Getting started](#getting-started). They are the heaviest read path in the app, so the page reads them through a per-user cache in Redis. Every write to an application invalidates it, an edited source or a deletion as much as a status move, and entries expire after five minutes, because two of the answers depend on the clock. Why the cache works with versioned keys instead of deleting entries is in the notes on the build.
 
+### Reading a job posting
+
+> **Status.** Built and tested, but not yet run with a real model. Every test and every trial in the browser used a stand-in that answers the way Ollama is documented to. Whether a real model reads well with these instructions is still open, so expect them to change.
+
+Adding an application by hand starts with copying a company, a role and a salary out of a posting. The page for a new application can take over that part. Paste the text of the posting into the box above the form, and a language model reads the company, the role and a yearly salary out of it, and puts the location, the application deadline and the main requirements into the notes. The result lands in the form, where every field can be checked and changed. Nothing is saved until the form itself is submitted, through the same Server Action and the same validation as a form filled in by hand.
+
+The answer of a model is input like any other, so it is checked before anything uses it, in two steps. First its shape. The model is handed a JSON schema, generated from a Zod schema, and its answer is parsed against that same Zod schema when it comes back. An answer that does not fit is thrown away whole, and the form stays as it was. Then its content, field by field. A deadline on 30 February, a salary range that runs backwards or a company name longer than the form allows is left out and the rest is kept, because an empty field is obvious in the form and a wrong one is not. The schema also gives the model a way to say that a text is no job posting at all, instead of forcing it to invent a company for a pancake recipe.
+
+The instructions and the schema live in one file under one version number, `src/lib/posting/extraction.ts`. A test pins the wording to the version, and the version goes into the log with every answer that is thrown away, so a bad answer can be traced to the wording that produced it. The log itself holds field names and error codes only, never a value, because the values can be the pasted text.
+
+Reading is the one thing an account can do here that is expensive to serve. With a local model a read keeps the machine busy for seconds, with a hosted one it would cost money. So it has two limits of its own, ten postings an hour per account and two hundred a day for the whole installation, because accounts are free to create and only the second limit bounds the total. Both are counted before the model is called, since a useless answer costs the same as a good one. Unlike the sign-in limits they fail closed. When Redis cannot be asked, nothing is read.
+
+The model runs on the same machine as the app, through [Ollama](https://ollama.com), so a pasted text never leaves it, and the box says so before anything is pasted. The reader is optional. Without `OLLAMA_URL`, `OLLAMA_MODEL` and `REDIS_URL` the box is not shown, and the page works as it always did.
+
 ### Accounts and access
 
 Two ways in. Email and password with credentials hashed using Argon2id, and OAuth through GitHub. Both paths end in the same session, a signed JWT stored in an httpOnly, SameSite cookie.
@@ -134,6 +151,7 @@ The role decides one thing. An account with the `ADMIN` role gets a page at `/ad
 | Testing | Vitest | Unit tests on the pure logic, and integration tests against a real Postgres and Redis for the analytics SQL and its cache, the rate limits, sign-up, sign-in, the GitHub callback and the ownership of every application, locally in Docker and in CI as service containers |
 | Cache & rate limiting | Redis 7 | Sliding-window rate limits on sign-in and sign-up, and a per-user cache for the analytics with versioned keys. Both need fast keys that expire by themselves, which is exactly what Redis is for |
 | Email | Resend in production, Mailpit locally | Both are reached with a single fetch against their HTTP API, the way the GitHub sign-in works without an SDK. Mailpit catches every mail in a local test inbox, so development needs no account and sends nothing real |
+| Language model | A local model through Ollama, optional | Reads a pasted job posting into the form for a new application. One documented POST with fetch, like the mail transports. The answer is held to a JSON schema generated from the same Zod schema that parses it afterwards. So far only run against a stand-in |
 
 End-to-end tests with Playwright are planned but not in the repo yet.
 
@@ -141,7 +159,7 @@ End-to-end tests with Playwright are planned but not in the repo yet.
 
 ## Architecture
 
-Everything in the diagram runs today.
+Everything in the diagram runs today. The dashed line is the optional reader for job postings, whose model has so far only been a stand-in.
 
 ```mermaid
 flowchart TB
@@ -161,6 +179,7 @@ flowchart TB
 
     RES["Resend in production<br/>Mailpit locally"]
     CRON["Vercel Cron<br/>daily at 05:00 UTC"]
+    LLM["Ollama<br/>local model, optional"]
 
     Browser --> PX
     PX --> RSC
@@ -173,9 +192,10 @@ flowchart TB
     SA --> RD
     CRON --> API
     API --> RES
+    SA -.-> LLM
 ```
 
-Reads happen in Server Components and never reach the client as raw queries. Mutations on applications go through Server Actions, which are the single place where authorization, validation and the transition rules are enforced. The one write outside them is the GitHub callback, which creates or links the user. Route Handlers exist only for the cases that need a real HTTP endpoint. That is the GitHub OAuth start and callback, the route that clears the cookie of a session that has ended, because its account was deleted or a password reset signed out every device, and the trigger for the reminder job.
+Reads happen in Server Components and never reach the client as raw queries. Mutations on applications go through Server Actions, which are the single place where authorization, validation and the transition rules are enforced. Reading a job posting is a Server Action as well, but one that writes nothing. It hands a suggestion back to the form, and the save takes the usual way. The one write outside them is the GitHub callback, which creates or links the user. Route Handlers exist only for the cases that need a real HTTP endpoint. That is the GitHub OAuth start and callback, the route that clears the cookie of a session that has ended, because its account was deleted or a password reset signed out every device, and the trigger for the reminder job.
 
 The proxy (Next.js 16 renamed middleware to proxy) is only the first check. The layout for signed-in pages checks again, every page checks once more itself, and every Server Action that touches applications checks before it writes anything. All of them use the same guard, which also asks the database whether the account still exists and whether the session still counts. A guard that gets skipped in one place is still enforced in the next.
 
@@ -299,6 +319,8 @@ To see a reminder mail, put any long random string into `CRON_SECRET` in `.env`,
 curl -H "Authorization: Bearer <your CRON_SECRET>" http://localhost:3000/api/cron/reminders
 ```
 
+To have job postings read into the form, install [Ollama](https://ollama.com), pull a model with `ollama pull <model>` and put the same name into `OLLAMA_MODEL` in `.env`. `OLLAMA_URL` already points at Ollama's default address. After a restart of the dev server the page for a new application shows a box for the posting. This part has not been run with a real model yet, see [Reading a job posting](#reading-a-job-posting).
+
 ### Environment variables
 
 | Variable | Purpose |
@@ -312,6 +334,7 @@ curl -H "Authorization: Bearer <your CRON_SECRET>" http://localhost:3000/api/cro
 | `MAILPIT_URL` | The local test inbox from `docker-compose.yml`, used while `RESEND_API_KEY` is empty |
 | `RESEND_API_KEY` | Sends the mails through Resend. Leave it empty locally, then they go to Mailpit |
 | `CRON_SECRET` | Protects the reminder job. Vercel Cron sends it as a bearer token, and without it the job refuses to run |
+| `OLLAMA_URL` / `OLLAMA_MODEL` | Address of a local Ollama server and the name of a model it has pulled, for reading job postings into the form. With the model left empty the box is not shown. The reader needs `REDIS_URL` as well, because its limits live there |
 
 For GitHub sign-in, create an OAuth app at github.com/settings/developers with the callback `http://localhost:3000/api/auth/github/callback` and put its two keys into `.env`. Email and password sign-in works without it.
 
@@ -342,7 +365,8 @@ a PostgreSQL database, where the free plan at Neon is enough, a Vercel account
 on the free Hobby plan, and a second GitHub OAuth app if GitHub sign-in should
 work there too. Redis is optional. Without `REDIS_URL` the rate limits switch
 themselves off and the analytics skip the cache, so a deployment that wants
-both needs a managed Redis as well.
+both needs a managed Redis as well. The reader for job postings stays off on
+Vercel, because it talks to a model on the same machine.
 
 1. Create the database in Frankfurt, `aws-eu-central-1` on Neon, which is where
    `vercel.json` runs the functions. Copy its direct connection string, not the
@@ -415,13 +439,14 @@ src/
     mail/                 sends a mail through Mailpit locally or Resend in production, HTML escaping
     password-reset/       reset links, hashed, single use, an hour long, and the actions behind both pages
     pipeline/             transition rules, the state machine
+    posting/              reads a pasted job posting with a model, the contract with it and the checks on its answer
     reminders/            the reminder job and the mail it sends
     validation/           Zod schemas, parsed in the Server Actions
     cache.ts              per-user cache in Redis with versioned keys
     db.ts                 Prisma client singleton
     format.ts             date formats with an explicit time zone
     link-token.ts         the token in a mail link, random, stored only as a hash
-    rate-limit.ts         sliding-window limits for sign-in, sign-up and the mails
+    rate-limit.ts         sliding-window limits for sign-in, sign-up, the mails and the reading of postings
     redis.ts              one Redis connection per process
     request.ts            the client address the rate limits count
   test/                   database, Redis, Mailpit and render helpers, and the global setup for the integration tests
@@ -453,10 +478,11 @@ Shipping order, one milestone at a time. The numbers match the status table abov
 - **M08 Analytics.** Five questions answered in SQL, weekly volume, a funnel from the status history, answer rate and median response time by source, time in stage with `LAG`, quiet applications. Integration tests against Postgres, locally and in CI
 - **M09 RBAC.** One guard for every page and Server Action that reads the account fresh from the database, and an admin page with platform numbers that shows no account's content. Roles change only through a script
 - **M10 Ship.** Everything a deployment needs, without running a public instance. Migrations inside the build, security headers, functions pinned next to the database, preview builds kept away from production, a demo account in the seed and screenshots in this README. Redis stays optional, without it the rate limits and the cache step aside
+- **Beyond the milestones.** A language model reads a pasted job posting into the form for a new application. Its answer is parsed against a schema, checked field by field and never saved without the user, and the reader has two limits that fail closed. Built and tested against a stand-in, not yet run with a real model
 
 ### Later, if the core holds up
 
-- Paste a job posting and have an LLM extract company, role, requirements and deadline into a prefilled form
+- A hosted model as a second reader for job postings, next to the local one
 - Browser extension that captures an application from the posting page in one click
 - CSV and JSON export, plus import from a spreadsheet for people migrating off one
 - iCal feed so interviews land in a real calendar
@@ -478,6 +504,9 @@ Things worth writing down as I go, filled in milestone by milestone.
 - **Why the pipeline lives in one module.** Every legal move is listed exactly once, in `src/lib/pipeline/transitions.ts`. The edit form, the status buttons on the detail page and the Kanban board all ask that module which moves to offer, and the Server Actions ask it again before anything is written, because a status posted by a browser is just a string until the server has checked it. The table is typed with `satisfies Record<Status, readonly Status[]>`, so adding a status to the Prisma enum without deciding where it may go breaks the build. Spreading the rules across the UI would have meant three places that can disagree, and the board would have been the first to drift
 - **How `reminderSentAt` keeps the reminder job from sending a mail twice.** The job claims a user's due follow-ups in one `UPDATE` that only matches rows whose `reminderSentAt` is still empty, and sends the mail only after that. A second run finds nothing left, whether it comes a minute later or at the same moment, because Postgres makes the second of two simultaneous updates wait for the first and then checks the condition again. Two tests prove it. One runs the job twice in a row. The other holds the first run in the middle of sending while a second run starts. Sending first and marking after passes the first test and fails the second, which is why the second one exists. The price is that a reminder goes out at most once. A failed send gives the claim back for the next run, and only a crash in the moment between claim and send loses one. Mail only goes to confirmed addresses, through GitHub or the confirmation link, and the template is a function rather than a React component, because `react-dom/server` refuses to load in the server layer that Route Handlers run in. Building it surfaced an older bug. An emptied field in the edit form arrived as `undefined`, which Prisma reads as "leave it alone", so a cleared follow-up date, note, link or salary kept its old value
 - **How a password reset takes an account back.** Sign-up refuses an address that already has an account, so whoever registered a stranger's address first used to keep it, and its owner had no way in. A reset link goes to the address, which hands the account to whoever reads that inbox. That alone would not have been enough, because sessions are signed JWTs that stay valid for a week, and the stranger's session would have outlived the new password. So every token now carries the account's `sessionVersion` from the moment it was signed. A reset raises that number in the same transaction that saves the password, and the guard looks the account up by its id and the version together, so a token from before finds no account, the same answer as for a deleted one. It works like changing a lock, every key cut before stops fitting at once. A version and not a timestamp, because the issue time of a JWT only has whole seconds, and a sign-in right after a reset could land in the same second as the reset. Tokens from before the change carry no version and count as the first generation, so the deploy signs nobody out. The request for a link answers the same for every address and sends the mail through `after()`, once the response is on its way, because writing the link and talking to the mail provider take long enough to measure. Nobody is signed in automatically after a reset, the new password is used the usual way, as the OWASP Forgot Password Cheat Sheet advises. One integration test tells the whole story, from the stranger's sign-up to the owner's sign-in, and it fails as soon as the version check or the raise is taken out. One thing stays as it was. Whatever the stranger typed into the account is still there after the takeover, and the owner can delete it. Deleting it on the way would also wipe the applications of a real user who never confirmed the address and only forgot the password
+- **Why the answer of a model is checked twice.** A schema can make sure that an answer has the right shape, and with a local model it does so before the answer exists. Ollama turns the JSON schema into a grammar, and the model cannot produce a token outside of it. Shape says nothing about content, though. `2026-02-30` is a well-formed date, and a lower salary above the upper one is two well-formed numbers. A tighter schema would catch some of that, but a schema is all or nothing, and one bad field would throw away seven good ones. So the schema stays loose on purpose, a date is a string and a salary any whole number, and a second step checks every field on its own and leaves out what makes no sense. Whatever is left passes the form's own validation, which a test holds together, so a suggestion is never the reason a save fails. The rules were checked like the security rules, by removing each one and watching its test fail. One test stayed green at first. The format check on the date looked redundant next to the check that the day exists, until a test for `2026-11` showed what it is for. JavaScript reads that as the first of November, a day no posting ever named. What all of this cannot show is how well a real model reads. The model in the tests answers what the tests tell it to
+- **Why the instructions repeat what the schema already says.** The rule of each field is written as its description in the Zod schema, right next to its type. It is natural to assume that the model reads those descriptions, since they travel with the schema. A local model does not. The grammar that holds it to the schema fixes the shape of the answer and passes on none of the words, like a form with boxes and no hints on how to fill them in. So the instructions are built from the same descriptions and spell the rule of every field out in plain text. One source, and two places it has to reach
+- **Why the limits on the reader fail closed, and why there are two.** Every other limit here lets requests through when Redis is down, see above, because a sign-in that slips through costs nothing. A read that slips through keeps the machine busy, or costs money once the model is a hosted one, for as long as Redis stays down, and reading postings is an extra the app works without. So these two limits use a strict variant that reports when it could not count, and the action refuses then. A limit per account alone would not bound much either, since accounts are free to create. The limit for the whole installation is the one that caps the total, and the account is counted first, so an account that is over its own limit cannot use up what everyone shares. That order is the lesson from the reset links, where the same mistake would have let a blocked sender use up a stranger's quota
 
 ---
 

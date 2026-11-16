@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { closeRedis, getRedis } from "@/lib/redis";
 import { resetRedis } from "@/test/redis";
-import { clear, hit, keyFor, peek, type Limit } from "./rate-limit";
+import { clear, hit, hitStrict, keyFor, peek, type Limit } from "./rate-limit";
 
 // Three attempts a minute, small enough to walk through by hand.
 const LIMIT: Limit = { name: "test", max: 3, windowMs: 60_000 };
@@ -108,6 +108,47 @@ describe("without Redis", () => {
 
     try {
       expect(await hit(LIMIT, "someone", T0)).toEqual({ allowed: true });
+      expect(Date.now() - started).toBeLessThan(2_000);
+    } finally {
+      errors.mockRestore();
+      vi.unstubAllEnvs();
+      await closeRedis();
+    }
+  });
+});
+
+describe("a strict limit, for what costs money", () => {
+  it("counts like any other limit while Redis answers", async () => {
+    for (const offset of [0, 10_000, 20_000]) {
+      expect(await hitStrict(LIMIT, "someone", T0 + offset)).toEqual({ allowed: true });
+    }
+
+    expect(await hitStrict(LIMIT, "someone", T0 + 30_000)).toEqual({
+      allowed: false,
+      retryAfterMs: 30_000,
+    });
+  });
+
+  it("answers null without Redis, where hit would let the request through", async () => {
+    vi.stubEnv("REDIS_URL", "");
+
+    try {
+      expect(await hitStrict(LIMIT, "someone", T0)).toBeNull();
+      expect(await hit(LIMIT, "someone", T0)).toEqual({ allowed: true });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("answers null, quickly, when Redis does not answer", async () => {
+    await closeRedis();
+    // Nothing listens on this port.
+    vi.stubEnv("REDIS_URL", "redis://127.0.0.1:6390/15");
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const started = Date.now();
+
+    try {
+      expect(await hitStrict(LIMIT, "someone", T0)).toBeNull();
       expect(Date.now() - started).toBeLessThan(2_000);
     } finally {
       errors.mockRestore();
