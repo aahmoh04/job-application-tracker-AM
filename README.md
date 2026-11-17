@@ -5,7 +5,7 @@
 **Track every application, its status, and follow-up reminders, so nothing slips through.**
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)](https://nextjs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -27,7 +27,7 @@ There is no hosted instance, on purpose. The app stores email addresses, and run
 
 ## Build status
 
-This project is built in public, one milestone at a time. The checklist is the honest picture of what actually runs today. Sections further down describe the product as designed, and every part that is not built yet says so in its heading or right next to it.
+This project was built in public, one milestone at a time, and all eleven are done. This is version 1.0.0. The checklist is the honest picture of what actually runs, and the one row that is not done yet says so, here and in its own section.
 
 | # | Milestone | Status |
 |---|---|---|
@@ -153,7 +153,7 @@ The role decides one thing. An account with the `ADMIN` role gets a page at `/ad
 | Email | Resend in production, Mailpit locally | Both are reached with a single fetch against their HTTP API, the way the GitHub sign-in works without an SDK. Mailpit catches every mail in a local test inbox, so development needs no account and sends nothing real |
 | Language model | A local model through Ollama, optional | Reads a pasted job posting into the form for a new application. One documented POST with fetch, like the mail transports. The answer is held to a JSON schema generated from the same Zod schema that parses it afterwards. So far only run against a stand-in |
 
-End-to-end tests with Playwright are planned but not in the repo yet.
+There are no automated end-to-end tests in a browser. The larger changes were clicked through by hand in a production build against a separate database, and their pull requests say what was tried.
 
 ---
 
@@ -480,9 +480,18 @@ Shipping order, one milestone at a time. The numbers match the status table abov
 - **M10 Ship.** Everything a deployment needs, without running a public instance. Migrations inside the build, security headers, functions pinned next to the database, preview builds kept away from production, a demo account in the seed and screenshots in this README. Redis stays optional, without it the rate limits and the cache step aside
 - **Beyond the milestones.** A language model reads a pasted job posting into the form for a new application. Its answer is parsed against a schema, checked field by field and never saved without the user, and the reader has two limits that fail closed. Built and tested against a stand-in, not yet run with a real model
 
+### Known limits
+
+- The reader for job postings has not run with a real model yet, see [Reading a job posting](#reading-a-job-posting)
+- Companies are matched by their exact name. `Northwind` and `northwind` are two companies, and so are `Northwind` and `Northwind GmbH`. Merging them takes a normalised column and a decision about the duplicates that already exist
+- GitHub sign-in links only onto accounts without a password. Linking onto a confirmed password account would be safe by now, the notes on the build say why, but the rule has not been loosened
+- The numbers on the admin page are not anonymous while there are only a few accounts
+- `npm audit` is clean for what runs in production. For the lint and test tooling it reports advisories in two glob matchers, minimatch and picomatch, as of November 2026. The fix for the first sits in a major version that ESLint and its plugins do not use yet, the second has no fixed release, and `npm audit fix --force` would only move ESLint's Next config and Vitest back to older majors. Both advisories are about patterns an attacker controls, which a linter and a test runner on their own repository do not take
+
 ### Later, if the core holds up
 
 - A hosted model as a second reader for job postings, next to the local one
+- End-to-end tests in a browser with Playwright, starting with drag and drop on the board
 - Browser extension that captures an application from the posting page in one click
 - CSV and JSON export, plus import from a spreadsheet for people migrating off one
 - iCal feed so interviews land in a real calendar
@@ -491,7 +500,7 @@ Shipping order, one milestone at a time. The numbers match the status table abov
 
 ## Notes on the build
 
-Things worth writing down as I go, filled in milestone by milestone.
+Things worth writing down, collected milestone by milestone.
 
 - **Why ownership lives in the `where` clause and not in an `if`.** Every read takes a user id and puts it into the query, so an application belonging to someone else is never loaded rather than loaded and rejected. Deleting uses `deleteMany` with the same where clause. `delete` would accept the user id as well, but it throws when nothing matches, while `deleteMany` simply affects zero rows, so a foreign id gets exactly the same answer as a missing one
 - **Why M03 ships with one OAuth provider instead of two.** The plan said Google and GitHub. GitHub is done, and adding Google would have meant a second set of credentials on top of a flow that is already written and understood. The interesting part of OAuth is the flow itself, not repeating it, so the scope was cut on purpose rather than left half finished
